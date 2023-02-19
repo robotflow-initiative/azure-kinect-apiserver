@@ -1,0 +1,4 @@
+pyyaml
+pykinect_azure==0.0.2
+opencv-python
+numpy

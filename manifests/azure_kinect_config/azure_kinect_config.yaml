@@ -1,0 +1,52 @@
+azure_kinect:
+  data_path: './azure_kinect_data'
+  exec_path: 'k4arecorder.exe'
+  api:
+    port: 8083
+    interface: '0.0.0.0'
+  debug: false
+  camera_options:
+    - index: 0
+      sn: ''
+      color_format: 1
+      color_resolution: 5
+      depth_mode: 2
+      depth_delay_msec: 0
+      camera_fps: 30
+      imu: true
+      sync_mode: 1
+      sync_delay_msec: 0
+      exposure: 0
+    - index: 1
+      sn: ''
+      color_format: 1
+      color_resolution: 5
+      depth_mode: 2
+      depth_delay_msec: 0
+      camera_fps: 30
+      imu: true
+      sync_mode: 2
+      sync_delay_msec: 0
+      exposure: 0
+    - index: 2
+      sn: ''
+      color_format: 1
+      color_resolution: 5
+      depth_mode: 2
+      depth_delay_msec: 0
+      camera_fps: 30
+      imu: true
+      sync_mode: 2
+      sync_delay_msec: 0
+      exposure: 0
+    - index: 3
+      sn: ''
+      color_format: 1
+      color_resolution: 5
+      depth_mode: 2
+      depth_delay_msec: 0
+      camera_fps: 30
+      imu: true
+      sync_mode: 2
+      sync_delay_msec: 0
+      exposure: 0

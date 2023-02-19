@@ -1,0 +1,6 @@
+[submodule "azure_kinect_apiserver/thirdparty/mkv_reader"]
+	path = azure_kinect_apiserver/thirdparty/mkv_reader
+	url = https://github.com/rajkundu/Azure-Kinect-MKV-Reader.git
+[submodule "azure_kinect_apiserver/thirdparty/pyKinectAzure"]
+	path = azure_kinect_apiserver/thirdparty/pyKinectAzure
+	url = https://github.com/davidliyutong/pyKinectAzure
