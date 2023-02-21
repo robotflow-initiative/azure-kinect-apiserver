@@ -191,7 +191,7 @@ class KinectSystemCfg(BaseCfg):
             args_list = []
             prefix = f"-l {self.length_sec}" if self.length_sec > 0 else ''
             for opt in filter(lambda x: x.sync_mode != 1, self.camera_options):
-                postfix = f"{osp.join(record_path, f'output_{opt.index}.mkv')}"
+                postfix = f"{osp.join(record_path, f'{opt.sn}.mkv')}" if opt.sn is not None else f"{osp.join(record_path, f'output_{opt.index}.mkv')}"
                 args, err = opt.get_args()
                 if err is not None:
                     return [], err

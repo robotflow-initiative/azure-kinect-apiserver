@@ -69,12 +69,17 @@ class Application:
                 self.lock.release()
                 return err
 
+            timestamps = []
             for command in commands:
                 logging.info(command)
                 process = subprocess.Popen(command, shell=True)
+                timestamps.append(datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
                 self.recording_processes.append(process)
                 time.sleep(1)
 
+            with open(osp.join(record_path, "default.log"), "w+") as f:
+                f.write("Start recording at: \n\t")
+                f.write("\n\t".join(timestamps))
             self.recording_processes.reverse()
 
             self.state["recording"] = True
@@ -94,11 +99,14 @@ class Application:
             for process in self.recording_processes:
                 process.send_signal(signal.CTRL_C_EVENT)
 
-            for process in self.recording_processes:
-                try:
-                    process.wait()
-                except Exception as e:
-                    logger.debug(e)
+            try:
+                for process in self.recording_processes:
+                    try:
+                        process.wait(timeout=2)
+                    except Exception as e:
+                        logger.warning(e)
+            except Exception as e:
+                logger.warning(e)
 
             self.state["recording"] = False
             self.lock.release()

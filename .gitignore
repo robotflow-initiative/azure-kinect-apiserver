@@ -1,5 +1,8 @@
 .vscode
 .idea
+dist
 
 *.mkv
 *.pyc
+*.egg-info
+*.whl
