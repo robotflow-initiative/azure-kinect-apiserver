@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 import time
@@ -8,9 +9,11 @@ from typing import List, Dict, Any, Optional
 
 import cv2
 
+logger = logging.getLogger("azure_kinect_apiserver.decoder.StateMachine")
+
 
 class StateMachine:
-    def __init__(self, stream_ids: List[str], criteria_sec: float = 0.04, drop_n_frames: int = 10):
+    def __init__(self, stream_ids: List[str], criteria_sec: float = 0.01, sync_delay_msec: float = .0, drop_n_frames: int = 20):
         assert len(stream_ids) > 0, "num_stream must be greater than 0"
         assert criteria_sec > 0, "criteria_sec must be greater than 0"
         assert drop_n_frames >= 0, "drop_n_frames must be greater than or equal to 0"
@@ -20,6 +23,7 @@ class StateMachine:
         self.master_id = stream_ids[0]
         self.subordinate_ids = stream_ids[1:]
         self.criteria_sec = criteria_sec
+        self.sync_delay_msec = sync_delay_msec
         self.drop_n_frames = drop_n_frames
         self.closed = False
         self.mutex = threading.Lock()
@@ -40,7 +44,6 @@ class StateMachine:
 
     def push(self, stream_id: str, frame: Dict[str, Any]) -> Optional[Exception]:
         frame_idx = frame['index']
-
         frame_ts_usec = frame['color_dev_ts_usec']
         if not self.is_index_valid(frame_idx):
             return None
@@ -71,11 +74,19 @@ class StateMachine:
             return None
         else:
             master_frame = self.frame_buffer[self.master_id].popleft()
+            while len(self.frame_buffer[self.master_id]) > 0:
+                if any([abs(self.frame_buffer[subordinate_id][0]['color_dev_ts_usec'] - master_frame['color_dev_ts_usec']) for subordinate_id in self.subordinate_ids]):
+                    break
+                else:
+                    master_frame = self.frame_buffer[self.master_id].popleft()
+                    continue
+
             subordinate_frames = {k: None for k in self.subordinate_ids}
             flag_master_not_synced = False
             for subordinate_id in self.subordinate_ids:
                 while len(self.frame_buffer[subordinate_id]) > 0:
                     subordinate_frame = self.frame_buffer[subordinate_id].popleft()
+
                     if abs(subordinate_frame['color_dev_ts_usec'] - master_frame['color_dev_ts_usec']) < self.criteria_sec * 1e6:
                         subordinate_frames[subordinate_id] = subordinate_frame  # save frame
                         break
@@ -83,7 +94,7 @@ class StateMachine:
                         flag_master_not_synced = True
                         break
                     else:
-                        pass
+                        continue
 
                 if flag_master_not_synced:
                     break
@@ -100,6 +111,7 @@ class StateMachine:
 
 
 def state_machine_save_thread_v1(m: StateMachine, data_dir: str, camera_names: List[str]):
+    logger.info("start state_machine_save_thread_v1")
     if not osp.exists(data_dir):
         os.makedirs(data_dir)
     for stream_id in camera_names:
@@ -119,15 +131,16 @@ def state_machine_save_thread_v1(m: StateMachine, data_dir: str, camera_names: L
         if m.ready:
             frames = m.try_pop()
             if frames is not None:
-                # print(frames)
                 for stream_id, frame in frames.items():
-                    pool.submit(cv2.imwrite, osp.join(data_dir, stream_id, 'color', f'{frame["color_dev_ts_usec"]}.jpg'), frame['color'])
-                    pool.submit(cv2.imwrite, osp.join(data_dir, stream_id, 'depth', f'{frame["color_dev_ts_usec"]}.png'), frame['depth'])
+                    color_path = osp.join(data_dir, stream_id, 'color', f'{frame["color_dev_ts_usec"]}.jpg')
+                    depth_path = osp.join(data_dir, stream_id, 'depth', f'{frame["color_dev_ts_usec"]}.png')
+                    pool.submit(cv2.imwrite, color_path, frame['color'])
+                    pool.submit(cv2.imwrite, depth_path, frame['depth'])
                     meta_handles[stream_id].write(
                         f'{frame["color_dev_ts_usec"]},{frame["index"]},{frame["color_dev_ts_usec"]},{frame["depth_dev_ts_usec"]},{frame["color_sys_ts_nsec"]},{frame["depth_sys_ts_nsec"]}\n'
                     )
                     # cv2.imwrite(osp.join(data_dir, stream_id, 'color', f'{frame["color_dev_ts_usec"]}.jpg'), frame['color'])
                     # cv2.imwrite(osp.join(data_dir, stream_id, 'depth', f'{frame["color_dev_ts_usec"]}.png'), frame['depth'])
         else:
-            time.sleep(0.1)
+            time.sleep(2)  # Must be an enough long duration
     pool.shutdown(wait=True)

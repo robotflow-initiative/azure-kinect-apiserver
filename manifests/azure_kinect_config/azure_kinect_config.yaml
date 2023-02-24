@@ -1,52 +1,52 @@
 azure_kinect:
-  data_path: './azure_kinect_data'
-  exec_path: 'k4arecorder.exe'
   api:
+    interface: 0.0.0.0
     port: 8083
-    interface: '0.0.0.0'
-  debug: false
   camera_options:
-    - index: 0
-      sn: ''
-      color_format: 1
-      color_resolution: 5
-      depth_mode: 2
-      depth_delay_msec: 0
-      camera_fps: 30
-      imu: true
-      sync_mode: 1
-      sync_delay_msec: 0
-      exposure: 0
-    - index: 1
-      sn: ''
-      color_format: 1
-      color_resolution: 5
-      depth_mode: 2
-      depth_delay_msec: 0
-      camera_fps: 30
-      imu: true
-      sync_mode: 2
-      sync_delay_msec: 0
-      exposure: 0
-    - index: 2
-      sn: ''
-      color_format: 1
-      color_resolution: 5
-      depth_mode: 2
-      depth_delay_msec: 0
-      camera_fps: 30
-      imu: true
-      sync_mode: 2
-      sync_delay_msec: 0
-      exposure: 0
-    - index: 3
-      sn: ''
-      color_format: 1
-      color_resolution: 5
-      depth_mode: 2
-      depth_delay_msec: 0
-      camera_fps: 30
-      imu: true
-      sync_mode: 2
-      sync_delay_msec: 0
-      exposure: 0
+  - camera_fps: 30
+    color_format: 0
+    color_resolution: 5
+    depth_delay_usec: 0
+    depth_mode: 2
+    exposure: 0
+    imu: true
+    index: 0
+    sn: '000673513312'
+    sync_delay_usec: 0
+    sync_mode: 1
+  - camera_fps: 30
+    color_format: 0
+    color_resolution: 5
+    depth_delay_usec: 0
+    depth_mode: 2
+    exposure: 0
+    imu: true
+    index: 1
+    sn: '000700713312'
+    sync_delay_usec: 160
+    sync_mode: 2
+  - camera_fps: 30
+    color_format: 0
+    color_resolution: 5
+    depth_delay_usec: 0
+    depth_mode: 2
+    exposure: 0
+    imu: true
+    index: 2
+    sn: '000760113312'
+    sync_delay_usec: 320
+    sync_mode: 2
+  - camera_fps: 30
+    color_format: 0
+    color_resolution: 5
+    depth_delay_usec: 0
+    depth_mode: 2
+    exposure: 0
+    imu: true
+    index: 3
+    sn: '000729313312'
+    sync_delay_usec: 480
+    sync_mode: 2
+  data_path: ./azure_kinect_data
+  debug: false
+  exec_path: k4arecorder.exe

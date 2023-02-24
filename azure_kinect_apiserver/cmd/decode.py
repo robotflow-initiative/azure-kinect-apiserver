@@ -1,6 +1,7 @@
 import argparse
 import concurrent.futures
 import glob
+import logging
 import threading
 from os import path as osp
 from typing import Dict, Optional
@@ -45,17 +46,25 @@ def mkv_worker(data_dir: str):
 
 
 def main(args: argparse.Namespace):
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("azure_kinect_apiserver.cmd.decode")
+    logger.info("processing directory: {}".format(osp.realpath(args.data_dir)))
+
     return mkv_worker(args.data_dir)
 
 
 def entry_point(argv):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, required=True)
-    args = parser.parse_args()
-    return main(args)
+    if len(argv) < 1:
+        print("Usage: python -m azure_kinect_apiserver decode <path>")
+        return 1
+    else:
+        data_dir = argv[0]
+        args = argparse.Namespace()
+        args.data_dir = data_dir
+        return main(args)
 
 
 if __name__ == '__main__':
     import sys
 
-    exit(entry_point(sys.argv))
+    exit(entry_point(sys.argv[1:]))

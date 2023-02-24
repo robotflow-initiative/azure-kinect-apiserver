@@ -5,7 +5,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.append(osp.join(os.path.realpath(__file__), '../thirdparty/pyKinectAzure'))
+sys.path.append(osp.join(os.path.dirname(__file__), '../thirdparty/pyKinectAzure'))
 
 from azure_kinect_apiserver.thirdparty import pykinect
 

@@ -1,11 +1,12 @@
 import sys
+
 sys.path.append('./azure_kinect_apiserver/thirdparty/pyKinectAzure')
 
 from azure_kinect_apiserver.thirdparty import MKVReader, TRACK
 from azure_kinect_apiserver.thirdparty import pykinect
 # import pykinect_azure as pykinect
 
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional
 import cv2
 import numpy as np
 

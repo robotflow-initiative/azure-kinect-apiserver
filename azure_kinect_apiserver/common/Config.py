@@ -1,4 +1,4 @@
-'''
+"""
 			"Record configuration: \n"
 			f"\tcolor_format: {self._handle.color_format} \n\t(0:JPG, 1:NV12, 2:YUY2, 3:BGRA32)\n\n"
 			f"\tcolor_resolution: {self._handle.color_resolution} \n\t(0:OFF, 1:720p, 2:1080p, 3:1440p, 4:1536p, 5:2160p, 6:3072p)\n\n"
@@ -12,13 +12,19 @@
 			f"\twired_sync_mode: {self._handle.wired_sync_mode}\n\t(0:Standalone mode, 1:Master mode, 2:Subordinate mode)\n\n"
 			f"\tsubordinate_delay_off_master_usec: {self._handle.subordinate_delay_off_master_usec} us.\n\tThe external synchronization timing.\n\n"
 			f"\tstart_timestamp_offset_usec: {self._handle.start_timestamp_offset_usec} us. \n\tStart timestamp offset.\n\n"
-'''
+"""
 import datetime
+import logging
 import os.path as osp
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
 import yaml
+from py_cli_interaction import must_parse_cli_int, must_parse_cli_string, must_parse_cli_bool, must_parse_cli_sel
+
+from .functional import probe_device
+
+logger = logging.getLogger(__name__)
 
 
 class BaseCfg:
@@ -28,7 +34,8 @@ class BaseCfg:
     def load_dict(self, src: Dict[str, Any]) -> None:
         raise NotImplemented
 
-    def configure_from_keyboard(self) -> bool:
+    @staticmethod
+    def configure_from_keyboard() -> bool:
         raise NotImplemented
 
 
@@ -40,11 +47,11 @@ class KinectCameraCfg(BaseCfg):
     color_format: int = 0
     color_resolution: int = 0
     depth_mode: int = 0
-    depth_delay_msec: int = 0
+    depth_delay_usec: int = 0
     camera_fps: int = 0
     imu: bool = False
     sync_mode: int = 0
-    sync_delay_msec: int = 0
+    sync_delay_usec: int = 0
     exposure: int = -12
 
     __COLOR_RESOLUTION_CANDIDATES__ = ('OFF', '720p', '1080p', '1440p', '1536p', '2160p', '3072p')
@@ -62,11 +69,11 @@ class KinectCameraCfg(BaseCfg):
             'color_format': self.color_format,
             'depth_mode': self.depth_mode,
             'color_resolution': self.color_resolution,
-            'depth_delay_msec': self.depth_delay_msec,
+            'depth_delay_usec': self.depth_delay_usec,
             'camera_fps': self.camera_fps,
             'imu': self.imu,
             'sync_mode': self.sync_mode,
-            'sync_delay_msec': self.sync_delay_msec,
+            'sync_delay_usec': self.sync_delay_usec,
             'exposure': self.exposure,
         }
 
@@ -76,11 +83,11 @@ class KinectCameraCfg(BaseCfg):
         self.color_format = src['color_format'] if src['color_format'] is not None else 0
         self.color_resolution = src['color_resolution'] if src['color_resolution'] is not None else 5
         self.depth_mode = src['depth_mode'] if src['depth_mode'] is not None else 2
-        self.depth_delay_msec = src['depth_delay_msec'] if src['depth_delay_msec'] is not None else 0
+        self.depth_delay_usec = src['depth_delay_usec'] if src['depth_delay_usec'] is not None else 0
         self.camera_fps = src['camera_fps'] if src['camera_fps'] is not None else 30
         self.imu = src['imu'] if src['imu'] is not None else False
         self.sync_mode = src['sync_mode'] if src['sync_mode'] is not None else 0
-        self.sync_delay_msec = src['sync_delay_msec'] if src['sync_delay_msec'] is not None else 0
+        self.sync_delay_usec = src['sync_delay_usec'] if src['sync_delay_usec'] is not None else 0
         self.exposure = src['exposure'] if src['exposure'] is not None else -12
 
     @property
@@ -106,18 +113,18 @@ class KinectCameraCfg(BaseCfg):
             s = f"--device {self.index} " \
                 f"-c {self.__COLOR_RESOLUTION_CANDIDATES__[self.color_resolution]} " \
                 f"-d {self.__DEPTH_MODE_CANDIDATES__[self.depth_mode]} " \
-                f"--depth-delay {self.depth_delay_msec} " \
+                f"--depth-delay {self.depth_delay_usec} " \
                 f"-r {str(int(self.camera_fps))} " \
                 f"--imu {'ON' if self.imu else 'OFF'} " \
                 f"--external-sync {self.__SYNC_MODE_CANDIDATES__[self.sync_mode]} " \
-                f"--sync-delay {self.sync_delay_msec} "
+                f"--sync-delay {self.sync_delay_usec} "
             if -11 <= self.exposure <= 1:
                 s += f"-e {self.exposure} "
             return s, None
 
 
-@dataclass
 class KinectSystemCfg(BaseCfg):
+    config_path: str = ''
     data_path: str = './azure_kinect_data'
     exec_path: str = 'k4arecorder'
 
@@ -127,10 +134,20 @@ class KinectSystemCfg(BaseCfg):
     debug: bool = False
 
     length_sec: int = 0
-    camera_options: List[KinectCameraCfg] = field(default_factory=list)
+    camera_options: List[KinectCameraCfg] = []
 
-    def __post_init__(self):
-        pass
+    def __init__(self, config_path: str):
+        self.config_path = config_path
+        try:
+            cfg_dict = yaml.load(open(config_path, 'r'), Loader=yaml.FullLoader)
+        except Exception as e:
+            logger.warning(f'failed to load Azure Kinect Config: {e}')
+            return
+
+        if 'azure_kinect' in cfg_dict.keys():
+            self.load_dict(cfg_dict['azure_kinect'])
+        else:
+            logger.warning('failed to load Azure Kinect Config: No azure_kinect key found in config file')
 
     def get_dict(self) -> Dict[Any, Any]:
         return {
@@ -191,7 +208,7 @@ class KinectSystemCfg(BaseCfg):
             args_list = []
             prefix = f"-l {self.length_sec}" if self.length_sec > 0 else ''
             for opt in filter(lambda x: x.sync_mode != 1, self.camera_options):
-                postfix = f"{osp.join(record_path, f'{opt.sn}.mkv')}" if opt.sn is not None else f"{osp.join(record_path, f'output_{opt.index}.mkv')}"
+                postfix = f"{osp.join(record_path, f'{opt.sn}.mkv' if opt.sn is not None and opt.sn != '' else f'output_{opt.index}.mkv')}"
                 args, err = opt.get_args()
                 if err is not None:
                     return [], err
@@ -199,7 +216,7 @@ class KinectSystemCfg(BaseCfg):
                     args_list.append(prefix + args + postfix)
 
             for opt in filter(lambda x: x.sync_mode == 1, self.camera_options):
-                postfix = f"{osp.join(record_path, f'output_{opt.index}.mkv')}"
+                postfix = f"{osp.join(record_path, f'{opt.sn}.mkv' if opt.sn is not None and opt.sn != '' else f'output_{opt.index}.mkv')}"
                 args, err = opt.get_args()
                 if err is not None:
                     return [], err
@@ -213,6 +230,63 @@ class KinectSystemCfg(BaseCfg):
             return args_list, err
         else:
             return [f"{self.exec_path} {x}" for x in args_list], None
+
+    @staticmethod
+    def configure_from_keyboard() -> bool:
+        output_dir = must_parse_cli_string('Output Directory', './azure_kinect_config.yaml')
+        data_path = must_parse_cli_string('Data Path', './azure_kinect_data')
+        exec_path = must_parse_cli_string('Exec Path', 'k4arecorder')
+        api_port = must_parse_cli_int('API Port', 1, 65535, 8080)
+        api_interface = must_parse_cli_string('API Interface', '0.0.0.0')
+        debug = must_parse_cli_bool('Debug', False)
+
+        cams, ret = probe_device(exec_path)
+        if ret is not None:
+            print(f'error probing devices using {exec_path}: {ret}')
+            return False
+        else:
+            color_format = 0
+            color_resolution = must_parse_cli_sel('Color Resolution', ['OFF', '720p', '1080p', '1440p', '1536p', '2160p', '3072p'], default_value=5)
+            depth_mode = must_parse_cli_sel('Depth Mode', ['OFF', 'NFOV_2X2BINNED', 'NFOV_UNBINNED', 'WFOV_2X2BINNED', 'WFOV_UNBINNED', 'PASSIVE_IR'], default_value=2)
+            depth_delay_usec = must_parse_cli_int('Depth Delay (us)', default_value=0)
+            camera_fps_sel = must_parse_cli_sel('Camera FPS', [5, 15, 30], default_value=2)
+            camera_fps = [5, 15, 30][camera_fps_sel]
+            imu = must_parse_cli_bool('IMU', True)
+            sync_mode = 2
+            sync_delay_usec = must_parse_cli_int('Sync Delay (us)', default_value=0)
+            exposure = must_parse_cli_int('Exposure, -12 for auto exposure', min=-12, max=1, default_value=-12)
+
+            camera_options = [
+                {
+                    'index': x['Index'],
+                    'sn': str(x['Serial']),
+                    'color_format': color_format,
+                    'color_resolution': color_resolution,
+                    'depth_mode': depth_mode,
+                    'depth_delay_usec': depth_delay_usec,
+                    'camera_fps': camera_fps,
+                    'imu': imu,
+                    'sync_mode': sync_mode,
+                    'sync_delay_usec': sync_delay_usec,
+                    'exposure': exposure
+                } for x in cams
+            ]
+
+            cfg_dict = {
+                'azure_kinect': {
+                    'data_path': data_path,
+                    'exec_path': exec_path,
+                    'api': {
+                        'port': api_port,
+                        'interface': api_interface,
+                    },
+                    'debug': debug,
+                    'camera_options': camera_options
+                }
+            }
+
+            with open(output_dir, 'w') as f:
+                yaml.dump(cfg_dict, f)
 
 
 def generate_script_powershell(cfg: KinectSystemCfg, tag: str = None):
@@ -264,9 +338,7 @@ wait
 
 
 if __name__ == '__main__':
-    cfg_dict = yaml.load(open('manifests/azure_kinect_config/azure_kinect_config.yaml', 'r'), Loader=yaml.FullLoader)
-    cfg = KinectSystemCfg()
-    cfg.load_dict(cfg_dict['azure_kinect'])
+    cfg = KinectSystemCfg('manifests/azure_kinect_config/azure_kinect_config.yaml')
     [print(args) for args in cfg.get_commands('test')]
     print('------------------- Powershell -------------------')
     generate_script_powershell(cfg, 'test')

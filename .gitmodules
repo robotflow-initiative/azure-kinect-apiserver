@@ -4,3 +4,4 @@
 [submodule "azure_kinect_apiserver/thirdparty/pyKinectAzure"]
 	path = azure_kinect_apiserver/thirdparty/pyKinectAzure
 	url = https://github.com/davidliyutong/pyKinectAzure
+	branch = feat-timestamp

@@ -6,7 +6,7 @@ requires = open("requirements.txt", "r").readlines() if os.path.exists("requirem
 print("#-------------------    ", str(os.listdir("./")))
 setup(
     name="azure-kinect-apiserver",
-    version="0.0.1",
+    version="0.0.2",
     author="davidliyutong",
     author_email="davidliyutong@sjtu.edu.cn",
     description="Azure Kinect APIServer",
@@ -17,6 +17,7 @@ setup(
         "azure_kinect_apiserver.cmd",
         "azure_kinect_apiserver.common",
         "azure_kinect_apiserver.decoder",
+        "azure_kinect_apiserver.filters",
         "azure_kinect_apiserver.thirdparty",
     ],
     python_requires=">=3.7",

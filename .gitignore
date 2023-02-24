@@ -1,6 +1,8 @@
 .vscode
 .idea
 dist
+azure_kinect_data
+output
 
 *.mkv
 *.pyc

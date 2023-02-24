@@ -7,12 +7,14 @@ import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple, Dict, List
+import time
 
 import cv2
 import numpy as np
+import tqdm
 
-import azure_kinect_apiserver.thirdparty.pyKinectAzure.pykinect_azure as pykinect
-from azure_kinect_apiserver.common import KinectSystemCfg
+from azure_kinect_apiserver.common import KinectSystemCfg, probe_device
+from azure_kinect_apiserver.thirdparty import pykinect
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('azure_kinect_apiserver.app')
@@ -24,6 +26,7 @@ class Application:
     option: KinectSystemCfg = None
     state: Dict[str, bool] = None
     lock: threading.RLock = None
+    logger: logging.Logger = None
 
     device_list_info_cache: Optional[List[Dict]] = None
     device_list: Optional[List[pykinect.Device]] = None
@@ -38,6 +41,7 @@ class Application:
             "single_shot": False,
         }
         self.lock = threading.RLock()
+        self.logger = logging.getLogger('azure_kinect_apiserver.app')
 
         self.device_list_info_cache = None
         self.device_list = None
@@ -45,7 +49,7 @@ class Application:
 
         self.recording_processes = []
 
-    def start_recording(self, tag: str) -> Optional[Exception]:
+    def start_recording(self, tag: Optional[str]) -> Optional[Exception]:
         self.lock.acquire()
         if self.state["single_shot"]:
             self.lock.release()
@@ -72,9 +76,14 @@ class Application:
             timestamps = []
             for command in commands:
                 logging.info(command)
-                process = subprocess.Popen(command, shell=True)
+                if hasattr(signal, 'CTRL_C_EVENT'):
+                    # windows
+                    process = subprocess.Popen(command, shell=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                else:
+                    process = subprocess.Popen(command, shell=True)
                 timestamps.append(datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
                 self.recording_processes.append(process)
+                import time
                 time.sleep(1)
 
             with open(osp.join(record_path, "default.log"), "w+") as f:
@@ -96,52 +105,63 @@ class Application:
             return Exception("recording is not running")
         else:
             # Do something
+
             for process in self.recording_processes:
-                process.send_signal(signal.CTRL_C_EVENT)
+                logging.info(process)
+                if hasattr(signal, 'CTRL_C_EVENT'):
+                    # windows. Need CTRL_BREAK_EVENT to raise the signal in the whole process group
+                    process.send_signal(signal.CTRL_BREAK_EVENT)
+                    process.kill()
+                    # os.kill(process.pid, signal.CTRL_C_EVENT)
+                else:
+                    os.kill(process.pid, signal.SIGINT)
+                # process.terminate()
+                # os.kill(process.pid, signal.SIGTERM)
+                # os.kill(process.pid, signal.SIGINT)
+                # process.send_signal(signal.CTRL_C_EVENT)
 
             try:
                 for process in self.recording_processes:
                     try:
-                        process.wait(timeout=2)
+                        process.wait(timeout=3)
                     except Exception as e:
                         logger.warning(e)
             except Exception as e:
                 logger.warning(e)
 
             self.state["recording"] = False
+            self.recording_processes = []
             self.lock.release()
             return None
 
     def list_device(self) -> Tuple[List[Dict], Optional[Exception]]:
-        res = []
-        process = subprocess.Popen(
-            f"{self.option.exec_path} --list",
-            stdout=subprocess.PIPE
-        )
-        output = process.communicate()[0].decode("utf-8")
-        output = output.split('\r\n')[:-1]
-        for device_string in output:
-            try:
-                device = device_string.split('\t')
-                result = dict()
-                for device_property in device:
-                    device_property_list = device_property.split(':')
-                    result[device_property_list[0]] = device_property_list[1]
-                result['Index'] = int(result['Index'])
-                res.append(result)
-            except Exception as e:
-                logger.error(e)
-                return [], e
-        self.device_list_info_cache = res
-        return res, None
+        res, ret = probe_device(self.option.exec_path)
+        if ret is not None:
+            return res, ret
+        else:
+            self.device_list_info_cache = res
+            return res, None
 
     def __get_device_config__(self, index: int) -> pykinect.Configuration:
         # TODO: Implement this function
-        device_config = pykinect.default_configuration
-        device_config.wired_sync_mode = pykinect.K4A_WIRED_SYNC_MODE_STANDALONE
-        device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1080P
-        device_config.depth_mode = pykinect.K4A_DEPTH_MODE_NFOV_UNBINNED
-        return device_config
+        if self.option is None or self.option.camera_options is None or len(self.option.camera_options) <= index:
+            device_config = pykinect.default_configuration
+            device_config.wired_sync_mode = pykinect.K4A_WIRED_SYNC_MODE_STANDALONE
+            device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1080P
+            device_config.depth_mode = pykinect.K4A_DEPTH_MODE_NFOV_UNBINNED
+            return device_config
+        else:
+            opt = self.option.camera_options[index]
+            device_config = pykinect.default_configuration
+
+            device_config.camera_fps = [5, 10, 30].index(opt.camera_fps)
+            # device_config.color_format = opt.color_format
+            device_config.color_resolution = int(opt.color_resolution)
+            device_config.depth_delay_off_color_usec = int(opt.depth_delay_usec * 1000)
+            device_config.depth_mode = int(opt.depth_mode)
+            device_config.subordinate_delay_off_master_usec = int(opt.sync_delay_usec * 1000)
+            device_config.wired_sync_mode = int(opt.sync_mode)
+            return device_config
 
     def enter_single_shot_mode(self) -> Optional[Exception]:
         self.lock.acquire()
@@ -156,7 +176,11 @@ class Application:
             self.lock.release()
 
             if self.device_list_info_cache is None:
-                device_info_list = self.list_device()
+                res, ret = self.list_device()
+                if ret is None:
+                    device_info_list = res
+                else:
+                    return ret
             else:
                 device_info_list = self.device_list_info_cache
 
@@ -164,6 +188,7 @@ class Application:
             self.device_list = [pykinect.start_device(device_index=i, config=self.__get_device_config__(i)) for i, _ in
                                 enumerate(device_info_list)]
 
+            print(device_info_list)
             self.serial_map = {device['Index']: device['Serial'] for device in device_info_list}
             return None
 
@@ -208,36 +233,6 @@ class Application:
             logger.error(e)
             return e
 
-    # @staticmethod
-    # def retrieve_frame(device_list):
-    #     current_frame = [None for _ in range(len(device_list))]
-    #     current_depth_frame = [None for _ in range(len(device_list))]
-    #     success: List[bool] = [False for _ in range(len(device_list))]
-    #     captures: List[Optional[pykinect.Capture]] = [None for _ in range(len(device_list))]
-    #     try:
-    #         color_image, transformed_colored_depth_image = None, None
-    #         while not all(success):
-    #             for i in range(len(device_list)):
-    #                 if not success[i]:
-    #                     # Get capture
-    #                     captures[i] = device_list[i].update()
-    #
-    #             for i in range(len(device_list)):
-    #                 # Get the color image from the capture
-    #                 ret_color, color_image = captures[i].get_color_image()
-    #                 ret_depth, transformed_colored_depth_image = captures[i].get_transformed_depth_image()
-    #                 if ret_color and ret_depth:
-    #                     success[i] = True
-    #                     current_frame[i] = color_image
-    #                     current_depth_frame[i] = transformed_colored_depth_image
-    #                     logger.debug(color_image.shape, color_image.dtype, transformed_colored_depth_image.shape,
-    #                                  transformed_colored_depth_image.dtype)
-    #
-    #         return current_frame, current_depth_frame
-    #     except Exception as e:
-    #         logger.error(e)
-    #         return e
-
     @staticmethod
     def __save_image__(data_path, tag, camera_sn, current_frame, current_depth_frame, index):
         cv2.imwrite(osp.join(data_path, tag, camera_sn, 'color', f"{index}.png"),
@@ -247,14 +242,15 @@ class Application:
                     current_depth_frame)
         # load method: cv2.imread('path', cv2.IMREAD_UNCHANGED)
 
-    def single_shot(self, tag: str, index: int) -> Optional[Exception]:
+    def single_shot(self, tag: str, index: int) -> Tuple[
+        List[Optional[np.ndarray]], List[Optional[np.ndarray]], int, Optional[Exception]]:
         if tag is None or tag == "":
-            return Exception("tag is empty")
+            return [], [], -1, Exception("tag is empty")
 
         if not self.state["single_shot"]:
             err = self.enter_single_shot_mode()
             if err is not None:
-                return err
+                return [], [], -1, err
 
         for i in range(len(self.device_list)):
             camera_i_path = osp.join(self.option.data_path, tag, self.serial_map[i])
@@ -283,38 +279,13 @@ class Application:
         for i in range(len(self.device_list)):
             self.__retrieve_frame__(self.device_list, current_frames, current_depth_frames, i)
 
-        # try:
-        #     current_frames.clear()
-        #     current_depth_frames.clear()
-        #     for i, device in enumerate(self.device_list):
-        #         color_image, transformed_colored_depth_image = None, None
-        #         success = False
-        #         while not success:
-        #             # Get capture
-        #             capture = device.update()
-        #             # Get the color image from the capture
-        #             ret_color, color_image = capture.get_color_image()
-        #             ret_depth, transformed_colored_depth_image = capture.get_transformed_depth_image()
-        #
-        #             success = ret_color and ret_depth
-        #
-        #         current_frames.append(color_image)
-        #         current_depth_frames.append(transformed_colored_depth_image)
-        #         logger.debug(color_image.shape, color_image.dtype, transformed_colored_depth_image.shape,
-        #                      transformed_colored_depth_image.dtype)
-        #
-        # except Exception as e:
-        #     logger.error(e)
-        #     return e
-        #
-
         with ThreadPoolExecutor(max_workers=len(self.device_list)) as executor:
             res = []
             for i in range(len(self.device_list)):
                 res.append(executor.submit(self.__save_image__, self.option.data_path, tag, self.serial_map[i], current_frames[i], current_depth_frames[i], index))
             [r.result() for r in res]
 
-        return None
+        return current_frames, current_depth_frames, index, None
 
     def single_shot_mem(self, tag: str, index: int) -> Tuple[
         List[Optional[np.ndarray]], List[Optional[np.ndarray]], int, Optional[Exception]]:
@@ -351,9 +322,7 @@ if __name__ == '__main__':
     import yaml
     import time
 
-    cfg_dict = yaml.load(open('manifests/azure_kinect_config/azure_kinect_config.yaml', 'r'), Loader=yaml.FullLoader)
-    cfg = KinectSystemCfg()
-    cfg.load_dict(cfg_dict['azure_kinect'])
+    cfg = KinectSystemCfg('manifests/azure_kinect_config/azure_kinect_config.yaml')
 
     app = Application(cfg)
     print(app.list_device())
@@ -366,5 +335,9 @@ if __name__ == '__main__':
     # app.exit_single_shot_mode()
 
     app.start_recording(None)
-    time.sleep(10)
+    duration_sec = 1800
+    with tqdm.tqdm(total=duration_sec) as pbar:
+        for i in range(duration_sec):
+            time.sleep(1)
+            pbar.update(1)
     app.stop_recording()
