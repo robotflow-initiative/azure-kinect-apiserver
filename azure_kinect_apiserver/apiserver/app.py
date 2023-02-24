@@ -64,7 +64,7 @@ class Application:
 
             record_path = osp.join(self.option.data_path, tag)
             if not osp.exists(record_path):
-                os.makedirs(record_path)
+                os.makedirs(record_path, exist_ok=True)
 
             # for process in procs:
             #     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
@@ -258,11 +258,11 @@ class Application:
             camera_i_path_depth = osp.join(camera_i_path, "depth")
 
             if not osp.exists(camera_i_path):
-                os.makedirs(camera_i_path)
+                os.makedirs(camera_i_path, exist_ok=True)
             if not osp.exists(camera_i_path_color):
-                os.makedirs(camera_i_path_color)
+                os.makedirs(camera_i_path_color, exist_ok=True)
             if not osp.exists(camera_i_path_depth):
-                os.makedirs(camera_i_path_depth)
+                os.makedirs(camera_i_path_depth, exist_ok=True)
 
         #
         # threads = []
@@ -303,11 +303,11 @@ class Application:
             camera_i_path_depth = osp.join(camera_i_path, "depth")
 
             if not osp.exists(camera_i_path):
-                os.makedirs(camera_i_path)
+                os.makedirs(camera_i_path, exist_ok=True)
             if not osp.exists(camera_i_path_color):
-                os.makedirs(camera_i_path_color)
+                os.makedirs(camera_i_path_color, exist_ok=True)
             if not osp.exists(camera_i_path_depth):
-                os.makedirs(camera_i_path_depth)
+                os.makedirs(camera_i_path_depth, exist_ok=True)
 
         current_frames: List[Optional[np.ndarray]] = [None for _ in range(len(self.device_list))]
         current_depth_frames: List[Optional[np.ndarray]] = [None for _ in range(len(self.device_list))]

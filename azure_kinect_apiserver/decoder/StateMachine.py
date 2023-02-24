@@ -113,14 +113,14 @@ class StateMachine:
 def state_machine_save_thread_v1(m: StateMachine, data_dir: str, camera_names: List[str]):
     logger.info("start state_machine_save_thread_v1")
     if not osp.exists(data_dir):
-        os.makedirs(data_dir)
+        os.makedirs(data_dir, exist_ok=True)
     for stream_id in camera_names:
         if not osp.exists(osp.join(data_dir, stream_id)):
-            os.makedirs(osp.join(data_dir, stream_id))
+            os.makedirs(osp.join(data_dir, stream_id), exist_ok=True)
         if not osp.exists(osp.join(data_dir, stream_id, 'color')):
-            os.makedirs(osp.join(data_dir, stream_id, 'color'))
+            os.makedirs(osp.join(data_dir, stream_id, 'color'), exist_ok=True)
         if not osp.exists(osp.join(data_dir, stream_id, 'depth')):
-            os.makedirs(osp.join(data_dir, stream_id, 'depth'))
+            os.makedirs(osp.join(data_dir, stream_id, 'depth'), exist_ok=True)
 
     meta_handles = {s: open(osp.join(data_dir, s, 'meta.csv'), 'w') for s in camera_names}
     for stream_id in camera_names:
