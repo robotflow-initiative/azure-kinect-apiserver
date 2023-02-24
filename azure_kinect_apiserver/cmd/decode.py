@@ -1,6 +1,7 @@
 import argparse
 import concurrent.futures
 import glob
+import json
 import logging
 import threading
 from os import path as osp
@@ -8,7 +9,7 @@ from typing import Dict, Optional
 
 import tqdm
 
-from azure_kinect_apiserver.decoder import mkv_record_wrapper, StateMachine, state_machine_save_thread_v1
+from azure_kinect_apiserver.decoder import mkv_record_wrapper, StateMachine, state_machine_save_thread_v1, get_mkv_record_meta
 
 
 def mkv_worker(data_dir: str):
@@ -43,6 +44,9 @@ def mkv_worker(data_dir: str):
 
         m.close()
         t.join()
+
+    with open(osp.join(data_dir, "meta.json"), "w") as f:
+        json.dump([get_mkv_record_meta(f) for f in files], f, indent=4, sort_keys=True)
 
 
 def main(args: argparse.Namespace):

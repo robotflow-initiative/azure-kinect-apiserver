@@ -33,7 +33,7 @@ def get_mkv_record_meta(path: str) -> Tuple[Dict[str, Any], Optional[Exception]]
         pb_calibration = None
         pb_resolution = None
 
-    return {'config': pb_config, 'length': pb_length, 'calibration': pb_calibration, 'resolution': pb_resolution}, None
+    return {'config_str': str(pb_config), 'length': pb_length, 'calibration': pb_calibration, 'resolution': pb_resolution}, None
 
 
 def decode_thread(index, capture) -> Optional[Dict]:
