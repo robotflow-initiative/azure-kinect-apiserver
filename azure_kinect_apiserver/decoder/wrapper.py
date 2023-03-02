@@ -43,16 +43,26 @@ def decode_thread(index, capture) -> Optional[Dict]:
 
     # Get the colored depth
     depth_obj = capture.get_depth_image_object()
-    depth_obj_t = capture.camera_transform.depth_image_to_color_camera(depth_obj)
-    ret_depth, depth_color_image = depth_obj_t.to_numpy()
+    ret_depth, depth_image = depth_obj.to_numpy()
 
     if not ret_color or not ret_depth:
         return None
-
     else:
+        depth_image_custom16 = pykinect.Image.create_custom16_from_numpy(depth_image)
+        depth_obj_t = capture.camera_transform.depth_image_to_color_camera_custom(depth_obj, depth_image_custom16, pykinect.K4A_TRANSFORMATION_INTERPOLATION_TYPE_LINEAR)
+        _, depth_image = depth_obj_t.to_numpy()
+
+        # FIXME: cannot align color to depth
+        # print(color_image.shape, depth_image.shape)
+        # color_obj_bgra32 = pykinect.Image.create_bgra32_from_shape(color_image.shape[1], color_image.shape[0])
+        # color_obj_t = capture.camera_transform.color_image_to_depth_camera(depth_obj, color_obj_bgra32)
+        # _, color_image = color_obj_t.to_numpy()
+        # color_image = color_image[:, :, :3]
+
+
         return {
             'color': color_image,
-            'depth': depth_color_image,
+            'depth': depth_image,
             'color_dev_ts_usec': color_obj.device_timestamp_usec,
             'color_sys_ts_nsec': color_obj.system_timestamp_nsec,
             'depth_dev_ts_usec': depth_obj.device_timestamp_usec,
@@ -83,8 +93,3 @@ def mkv_record_wrapper(path: str) -> Tuple[Optional[concurrent.futures.Future], 
         except EOFError:
             pool.shutdown(wait=True)
             return None, EOFError('end of file')
-
-        # Use capture...
-        # Get color image
-        # combined_image = cv2.addWeighted(color_image[:, :, :3], 0.7, depth_color_image, 0.3, 0)
-        # color_img = frameset[TRACK.COLOR]

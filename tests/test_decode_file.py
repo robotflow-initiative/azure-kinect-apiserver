@@ -2,7 +2,6 @@ import sys
 
 sys.path.append('./azure_kinect_apiserver/thirdparty/pyKinectAzure')
 
-from azure_kinect_apiserver.thirdparty import MKVReader, TRACK
 from azure_kinect_apiserver.thirdparty import pykinect
 # import pykinect_azure as pykinect
 
@@ -58,61 +57,27 @@ def decode_file_v1(path: str) -> Optional[Exception]:
 
         # Get the colored depth
         depth_obj = capture.get_depth_image_object()
-        depth_obj_t = capture.camera_transform.depth_image_to_color_camera(depth_obj)
-        # ret_depth, depth_color_image = capture.get_colored_depth_image()
-        ret_depth, depth_color_image = depth_obj_t.to_numpy()
+        ret_depth, depth_image = depth_obj.to_numpy()
 
         if not ret_color or not ret_depth:
             continue
+
+        # depth_obj_t = capture.camera_transform.depth_image_to_color_camera(depth_obj)
+        # ret_depth, depth_color_image = depth_obj_t.to_numpy()
+        depth_image_custom16 = pykinect.Image.create_custom16_from_numpy(depth_image)
+        depth_obj_t = capture.camera_transform.depth_image_to_color_camera_custom(depth_obj, depth_image_custom16, pykinect.K4A_TRANSFORMATION_INTERPOLATION_TYPE_NEAREST)
+        _, depth_image = depth_obj_t.to_numpy()
 
         # combined_image = cv2.addWeighted(color_image[:, :, :3], 0.7, depth_color_image, 0.3, 0)
         # color_img = frameset[TRACK.COLOR]
         count += 1
         cv2.imshow('color', color_image[::4, ::4, :])
-        cv2.imshow('depth', clip_depth_image(depth_color_image)[::4, ::4, :])
+        cv2.imshow('depth', clip_depth_image(depth_image)[::4, ::4, :])
         cv2.waitKey(1)
 
     print('count: ', count)
     print('done')
 
-
-def decode_file_v2(path: str) -> Optional[Exception]:
-    max_depth = 10000
-    min_depth = 0
-    if not path.endswith('.mkv'):
-        return Exception(f'Invalid file extension: {path}')
-
-    # Initialize MKVReader object
-    reader = MKVReader(path)
-    calib = reader.get_calibration()
-    depth_count = 0
-    color_count = 0
-    while True:
-        try:
-            frameset = reader.get_next_frameset()
-
-        except EOFError:
-            break
-
-        # Use frameset...
-        if TRACK.COLOR in frameset.keys():
-            color_count += 1
-            color_img = frameset[TRACK.COLOR]
-            cv2.imshow('color', color_img[::4, ::4, :])
-        else:
-            print('colo frame lost at index', color_count)
-        if TRACK.DEPTH in frameset.keys():
-            depth_count += 1
-            depth_img = frameset[TRACK.DEPTH]
-            depth_img = depth_img - min_depth
-            depth_img = depth_img / (max_depth - min_depth) * 255
-            cv2.imshow('depth', cv2.applyColorMap(cv2.convertScaleAbs(depth_img, alpha=1), cv2.COLORMAP_JET))
-        else:
-            print('depth frame lost at index', depth_count)
-
-        cv2.waitKey(1)
-    print('count: ', depth_count, color_count)
-    print('done')
 
 
 if __name__ == '__main__':

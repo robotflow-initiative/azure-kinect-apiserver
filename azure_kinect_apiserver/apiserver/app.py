@@ -157,9 +157,9 @@ class Application:
             device_config.camera_fps = [5, 10, 30].index(opt.camera_fps)
             # device_config.color_format = opt.color_format
             device_config.color_resolution = int(opt.color_resolution)
-            device_config.depth_delay_off_color_usec = int(opt.depth_delay_usec * 1000)
+            device_config.depth_delay_off_color_usec = int(opt.depth_delay_usec)
             device_config.depth_mode = int(opt.depth_mode)
-            device_config.subordinate_delay_off_master_usec = int(opt.sync_delay_usec * 1000)
+            device_config.subordinate_delay_off_master_usec = int(opt.sync_delay_usec)
             device_config.wired_sync_mode = int(opt.sync_mode)
             return device_config
 
