@@ -21,19 +21,28 @@ def get_mkv_record_meta(path: str) -> Tuple[Dict[str, Any], Optional[Exception]]
     pb_length = pb.get_recording_length()
     ret, capture = pb.update()
     if ret:
-        pb_calibration = {
-            'color': capture.calibration.get_matrix(pykinect.K4A_CALIBRATION_TYPE_COLOR),
-            'depth': capture.calibration.get_matrix(pykinect.K4A_CALIBRATION_TYPE_DEPTH),
-        }
         pb_resolution = {
             'color': (capture.camera_transform.color_resolution.width, capture.camera_transform.color_resolution.height),
             'depth': (capture.camera_transform.depth_resolution.width, capture.camera_transform.depth_resolution.height),
         }
     else:
-        pb_calibration = None
         pb_resolution = None
 
-    return {'config_str': str(pb_config), 'length': pb_length, 'calibration': pb_calibration, 'resolution': pb_resolution}, None
+    return {'config': pb_config.to_dict(), 'length': pb_length, 'resolution': pb_resolution, 'is_master':  pb_config.to_dict()['sync_mode'] == 1}, None
+
+
+def get_mkv_record_calibration(path: str) -> Tuple[Dict[str, Any], Optional[Exception]]:
+    if not path.endswith('.mkv'):
+        return {}, Exception(f'Invalid file extension: {path}')
+
+    pb: pykinect.Playback = pykinect.start_playback(path)
+    ret, capture = pb.update()
+    if ret:
+        pb_calibration = capture.calibration.get_all_parameters()
+    else:
+        pb_calibration = None
+
+    return pb_calibration, None
 
 
 def decode_thread(index, capture) -> Optional[Dict]:
@@ -58,7 +67,6 @@ def decode_thread(index, capture) -> Optional[Dict]:
         # color_obj_t = capture.camera_transform.color_image_to_depth_camera(depth_obj, color_obj_bgra32)
         # _, color_image = color_obj_t.to_numpy()
         # color_image = color_image[:, :, :3]
-
 
         return {
             'color': color_image,

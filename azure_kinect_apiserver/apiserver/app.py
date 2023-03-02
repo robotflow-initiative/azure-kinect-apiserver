@@ -7,11 +7,10 @@ import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple, Dict, List
-import time
+import json
 
 import cv2
 import numpy as np
-import tqdm
 
 from azure_kinect_apiserver.common import KinectSystemCfg, probe_device
 from azure_kinect_apiserver.thirdparty import pykinect
@@ -30,6 +29,7 @@ class Application:
 
     device_list_info_cache: Optional[List[Dict]] = None
     device_list: Optional[List[pykinect.Device]] = None
+    calibrations: Optional[Dict[str, pykinect.Calibration]] = None
     serial_map: Optional[Dict[int, str]] = None
 
     recording_processes: List[subprocess.Popen] = None
@@ -86,9 +86,10 @@ class Application:
                 import time
                 time.sleep(1)
 
-            with open(osp.join(record_path, "default.log"), "w+") as f:
-                f.write("Start recording at: \n\t")
-                f.write("\n\t".join(timestamps))
+            if self.option.debug:
+                with open(osp.join(record_path, "debug.log"), "w+") as f:
+                    f.write("Start recording at: \n\t")
+                    f.write("\n\t".join(timestamps))
             self.recording_processes.reverse()
 
             self.state["recording"] = True
@@ -185,10 +186,12 @@ class Application:
                 device_info_list = self.device_list_info_cache
 
             # Modify camera configuration
-            self.device_list = [pykinect.start_device(device_index=i, config=self.__get_device_config__(i)) for i, _ in
-                                enumerate(device_info_list)]
+            self.device_list: List[pykinect.Device] = [pykinect.start_device(device_index=i, config=self.__get_device_config__(i)) for i, _ in
+                                                       enumerate(device_info_list)]
 
             print(device_info_list)
+            self.calibrations = {device['Serial']: self.device_list[i].get_calibration(self.__get_device_config__(i).depth_mode, self.__get_device_config__(i).color_resolution) for i, device in
+                                 enumerate(device_info_list)}
             self.serial_map = {device['Index']: device['Serial'] for device in device_info_list}
             return None
 
@@ -222,6 +225,7 @@ class Application:
                 # Get the color image from the capture
                 ret_color, color_image = capture.get_color_image()
                 ret_depth, transformed_colored_depth_image = capture.get_transformed_depth_image()
+                # TODO: Use nearest interpolation to get the depth image
 
                 success = ret_color and ret_depth
 
@@ -235,7 +239,7 @@ class Application:
 
     @staticmethod
     def __save_image__(data_path, tag, camera_sn, current_frame, current_depth_frame, index):
-        cv2.imwrite(osp.join(data_path, tag, camera_sn, 'color', f"{index}.png"),
+        cv2.imwrite(osp.join(data_path, tag, camera_sn, 'color', f"{index}.jpg"),
                     current_frame)
         # np.save(f"./save/{serial_map[i]}/depth/{number}.npy", current_depth_frame[i])
         cv2.imwrite(osp.join(data_path, tag, camera_sn, 'depth', f"{index}.png"),
@@ -259,6 +263,8 @@ class Application:
 
             if not osp.exists(camera_i_path):
                 os.makedirs(camera_i_path, exist_ok=True)
+                with open(osp.join(camera_i_path, "calibration.kinect.json"), 'w') as f:
+                    json.dump({serial: calibration.get_all_parameters() for serial, calibration in self.calibrations.items()}, f, indent=4)
             if not osp.exists(camera_i_path_color):
                 os.makedirs(camera_i_path_color, exist_ok=True)
             if not osp.exists(camera_i_path_depth):
@@ -297,18 +303,6 @@ class Application:
             if err is not None:
                 return [], [], -1, err
 
-        for i in range(len(self.device_list)):
-            camera_i_path = osp.join(self.option.data_path, tag, self.serial_map[i])
-            camera_i_path_color = osp.join(camera_i_path, "color")
-            camera_i_path_depth = osp.join(camera_i_path, "depth")
-
-            if not osp.exists(camera_i_path):
-                os.makedirs(camera_i_path, exist_ok=True)
-            if not osp.exists(camera_i_path_color):
-                os.makedirs(camera_i_path_color, exist_ok=True)
-            if not osp.exists(camera_i_path_depth):
-                os.makedirs(camera_i_path_depth, exist_ok=True)
-
         current_frames: List[Optional[np.ndarray]] = [None for _ in range(len(self.device_list))]
         current_depth_frames: List[Optional[np.ndarray]] = [None for _ in range(len(self.device_list))]
 
@@ -319,7 +313,6 @@ class Application:
 
 
 if __name__ == '__main__':
-    import yaml
     import time
 
     cfg = KinectSystemCfg('manifests/azure_kinect_config/azure_kinect_config.yaml')

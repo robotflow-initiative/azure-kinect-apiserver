@@ -1,15 +1,92 @@
 import argparse
 import concurrent.futures
+import datetime
 import glob
 import json
 import logging
+import os
 import threading
 from os import path as osp
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 
+import cv2
+import numpy as np
+import pandas as pd  # TODO: remove pandas dependency
 import tqdm
 
-from azure_kinect_apiserver.decoder import mkv_record_wrapper, StateMachine, state_machine_save_thread_v1, get_mkv_record_meta
+from azure_kinect_apiserver.decoder import (
+    mkv_record_wrapper,
+    StateMachine,
+    state_machine_save_thread_v1,
+    get_mkv_record_meta,
+    get_mkv_record_calibration,
+)
+
+
+def compute_timestamp_offset(calibration_pairs: List[Tuple[int, str]]):
+    calibration_pairs = np.array(list(
+        map(
+            lambda x: [int(x[0]) * 1e-6, datetime.datetime.strptime(x[1], "%Y-%m-%d_%H:%M:%S.%f").timestamp()],
+            calibration_pairs
+        )
+    ))
+    timestamp_offset = np.mean(calibration_pairs[:, 1] - calibration_pairs[:, 0])
+    logging.info(f"calibration pairs:\n {calibration_pairs}")
+    return float(timestamp_offset)
+
+
+def get_timestamp_offset_from_decoded(tagged_path: str,
+                                      cam_name: str,
+                                      examine_n_frames: int = 600,
+                                      maximum_no_detect_count: int = 30,
+                                      debug: bool = True) -> Tuple[float, Optional[Exception]]:
+    # Read meta data and check if all color images are present
+    _color_img_path_collection = sorted(glob.glob(os.path.join(tagged_path, cam_name, 'color', '*.jpg')), key=lambda x: int(osp.splitext(osp.basename(x))[0]))
+    color_img_meta = pd.read_csv(os.path.join(tagged_path, cam_name, 'meta.csv'))
+    assert len(color_img_meta) == len(_color_img_path_collection), f"len(color_img_meta)={len(color_img_meta)}"
+    color_img_path_collection = [osp.join(tagged_path, cam_name, 'color', str(filename_no_ext) + '.jpg') for filename_no_ext in color_img_meta['basename']]
+    assert all([osp.exists(x) for x in color_img_path_collection]), f"some color images are missing"
+
+    decoder = cv2.QRCodeDetector()
+    calibration_pairs = []
+    last_qrcode_data = None
+    no_detect_count = 0
+
+    with tqdm.tqdm(total=len(color_img_path_collection)) as pbar:
+        for img_idx, img_path in enumerate(color_img_path_collection):
+            # Read color image
+            if img_idx >= examine_n_frames or no_detect_count >= maximum_no_detect_count:
+                break
+            color_img = cv2.imread(img_path)
+            data, bbox, straight_qrcode = decoder.detectAndDecode(color_img)
+            if len(data) > 0:
+                if debug:
+                    print(f"Found QR code at {bbox} with data {data}")
+                    if bbox is not None:
+                        cv2.rectangle(color_img, tuple(bbox[0][0].astype(int)), tuple(bbox[0][2].astype(int)), (0, 255, 0), 2)
+                    cv2.putText(color_img, data, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    cv2.imshow('img', color_img)
+                    cv2.waitKey(0)
+                if last_qrcode_data is not None:
+                    if data == last_qrcode_data:
+                        continue
+                    else:
+                        calibration_pairs.append((color_img_meta['basename'][img_idx], data))
+                        last_qrcode_data = data
+                        logging.debug(f"found calibration pair: {color_img_meta['basename'][img_idx]} -> {data}")
+                else:
+                    last_qrcode_data = data
+            else:
+                if len(calibration_pairs) > 0:
+                    no_detect_count += 1
+            pbar.update(1)
+    if len(calibration_pairs) < 2:
+        logging.error(f"found {len(calibration_pairs)} calibration pairs, which is less than 2")
+        return 0, Exception("found less than 2 calibration pairs")
+    else:
+        timestamp_offset = compute_timestamp_offset(calibration_pairs)
+        logging.info(f"found {len(calibration_pairs)} calibration pairs, timestamp offset is {timestamp_offset}")
+        return timestamp_offset, None
 
 
 def mkv_worker(data_dir: str):
@@ -45,8 +122,18 @@ def mkv_worker(data_dir: str):
         m.close()
         t.join()
 
+    for i, file in enumerate(files):
+        with open(osp.join(data_dir, names[i], f"calibration.kinect.json"), "w") as f:
+            json.dump(get_mkv_record_calibration(file)[0], f, indent=4, sort_keys=True)
+
+    metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
+    master_camera = list(filter(lambda x: x[1]['is_master'] == True, metadata['recordings'].items()))[0][0]
+    ts, ret = get_timestamp_offset_from_decoded(tagged_path=data_dir, cam_name=master_camera, debug=False)
+    if ret is not None:
+        raise ret
+    metadata['system_timestamp_offset'] = ts
     with open(osp.join(data_dir, "meta.json"), "w") as f:
-        json.dump([get_mkv_record_meta(f) for f in files], f, indent=4, sort_keys=True)
+        json.dump(metadata, f, indent=4, sort_keys=True)
 
 
 def main(args: argparse.Namespace):

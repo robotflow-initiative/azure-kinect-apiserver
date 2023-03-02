@@ -9,3 +9,4 @@ py-cli-interaction
 httpx
 open3d
 requests
+pyzbar
