@@ -1,17 +1,17 @@
 """
-			"Record configuration: \n"
-			f"\tcolor_format: {self._handle.color_format} \n\t(0:JPG, 1:NV12, 2:YUY2, 3:BGRA32)\n\n"
-			f"\tcolor_resolution: {self._handle.color_resolution} \n\t(0:OFF, 1:720p, 2:1080p, 3:1440p, 4:1536p, 5:2160p, 6:3072p)\n\n"
-			f"\tdepth_mode: {self._handle.depth_mode} \n\t(0:OFF, 1:NFOV_2X2BINNED, 2:NFOV_UNBINNED,3:WFOV_2X2BINNED, 4:WFOV_UNBINNED, 5:Passive IR)\n\n"
-			f"\tcamera_fps: {self._handle.camera_fps} \n\t(0:5 FPS, 1:15 FPS, 2:30 FPS)\n\n"
-			f"\tcolor_track_enabled: {self._handle.color_track_enabled} \n\t(True of False). If Color camera images exist\n\n"
-			f"\tdepth_track_enabled: {self._handle.depth_track_enabled} \n\t(True of False). If Depth camera images exist\n\n"
-			f"\tir_track_enabled: {self._handle.ir_track_enabled} \n\t(True of False). If IR camera images exist\n\n"
-			f"\timu_track_enabled: {self._handle.imu_track_enabled} \n\t(True of False). If IMU samples exist\n\n"
-			f"\tdepth_delay_off_color_usec: {self._handle.depth_delay_off_color_usec} us. \n\tDelay between the color image and the depth image\n\n"
-			f"\twired_sync_mode: {self._handle.wired_sync_mode}\n\t(0:Standalone mode, 1:Master mode, 2:Subordinate mode)\n\n"
-			f"\tsubordinate_delay_off_master_usec: {self._handle.subordinate_delay_off_master_usec} us.\n\tThe external synchronization timing.\n\n"
-			f"\tstart_timestamp_offset_usec: {self._handle.start_timestamp_offset_usec} us. \n\tStart timestamp offset.\n\n"
+    "Record configuration: \n"
+    f"\tcolor_format: {self._handle.color_format} \n\t(0:JPG, 1:NV12, 2:YUY2, 3:BGRA32)\n\n"
+    f"\tcolor_resolution: {self._handle.color_resolution} \n\t(0:OFF, 1:720p, 2:1080p, 3:1440p, 4:1536p, 5:2160p, 6:3072p)\n\n"
+    f"\tdepth_mode: {self._handle.depth_mode} \n\t(0:OFF, 1:NFOV_2X2BINNED, 2:NFOV_UNBINNED,3:WFOV_2X2BINNED, 4:WFOV_UNBINNED, 5:Passive IR)\n\n"
+    f"\tcamera_fps: {self._handle.camera_fps} \n\t(0:5 FPS, 1:15 FPS, 2:30 FPS)\n\n"
+    f"\tcolor_track_enabled: {self._handle.color_track_enabled} \n\t(True of False). If Color camera images exist\n\n"
+    f"\tdepth_track_enabled: {self._handle.depth_track_enabled} \n\t(True of False). If Depth camera images exist\n\n"
+    f"\tir_track_enabled: {self._handle.ir_track_enabled} \n\t(True of False). If IR camera images exist\n\n"
+    f"\timu_track_enabled: {self._handle.imu_track_enabled} \n\t(True of False). If IMU samples exist\n\n"
+    f"\tdepth_delay_off_color_usec: {self._handle.depth_delay_off_color_usec} us. \n\tDelay between the color image and the depth image\n\n"
+    f"\twired_sync_mode: {self._handle.wired_sync_mode}\n\t(0:Standalone mode, 1:Master mode, 2:Subordinate mode)\n\n"
+    f"\tsubordinate_delay_off_master_usec: {self._handle.subordinate_delay_off_master_usec} us.\n\tThe external synchronization timing.\n\n"
+    f"\tstart_timestamp_offset_usec: {self._handle.start_timestamp_offset_usec} us. \n\tStart timestamp offset.\n\n"
 """
 import datetime
 import logging
@@ -159,7 +159,7 @@ class KinectSystemCfg(BaseCfg):
             },
             'debug': self.debug,
             'length_sec': self.length_sec,
-            'camera_options': [c.get_dict() for c in self.camera_options],
+            'camera_options': [cfg.get_dict() for cfg in self.camera_options],
         }
 
     def load_dict(self, src: Dict[str, Any]) -> None:
@@ -188,7 +188,7 @@ class KinectSystemCfg(BaseCfg):
                     (self.api_enabled and (self.api_port <= 0 or self.api_port > 65535)),
                     (self.length_sec < 0),
                     (not len(self.camera_options) > 0),
-                    (not all([c.valid for c in self.camera_options]))
+                    (not all([cfg.valid for cfg in self.camera_options]))
                 ]
         ):
             return False
@@ -200,7 +200,7 @@ class KinectSystemCfg(BaseCfg):
         if tag is None or tag == '':
             tag = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
-        record_path = osp.join(self.data_path, tag)
+        record_path = osp.join(self.data_path, tag, 'kinect')
 
         if not self.valid:
             return [], Exception('Invalid Kinect System Configuration')
@@ -240,9 +240,9 @@ class KinectSystemCfg(BaseCfg):
         api_interface = must_parse_cli_string('API Interface', '0.0.0.0')
         debug = must_parse_cli_bool('Debug', False)
 
-        cams, ret = probe_device(exec_path)
-        if ret is not None:
-            print(f'error probing devices using {exec_path}: {ret}')
+        cams, err = probe_device(exec_path)
+        if err is not None:
+            print(f'error probing devices using {exec_path}: {err}')
             return False
         else:
             color_format = 0
@@ -338,10 +338,10 @@ wait
 
 
 if __name__ == '__main__':
-    cfg = KinectSystemCfg('manifests/azure_kinect_config/azure_kinect_config.yaml')
-    [print(args) for args in cfg.get_commands('test')]
+    c = KinectSystemCfg('manifests/azure_kinect_config/azure_kinect_config.yaml')
+    [print(args) for args in c.get_commands('test')]
     print('------------------- Powershell -------------------')
-    generate_script_powershell(cfg, 'test')
+    generate_script_powershell(c, 'test')
     print('------------------- Bash -------------------')
-    generate_script_bash(cfg, 'test')
+    generate_script_bash(c, 'test')
     print('------------------- End -------------------')

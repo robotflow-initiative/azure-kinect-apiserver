@@ -9,9 +9,9 @@ import numpy as np
 import open3d as o3d
 import tqdm
 
-from azure_kinect_apiserver.common import vis_pcds, save_pcds, rigid_transform_3D
-from azure_kinect_apiserver.common.multical_camera import CameraInfo
-from azure_kinect_apiserver.common.point import RSPointCloudHelper
+from azure_kinect_apiserver.common import vis_pcds, save_pcds, rigid_transform_3d
+from azure_kinect_apiserver.common.MulticalCamera import MulticalCameraInfo
+from azure_kinect_apiserver.common.point import PointCloudHelper
 
 
 def get_trans_mat_by_north_and_west_combined(pc_helper):
@@ -48,7 +48,7 @@ def get_trans_mat_by_north_and_west_combined(pc_helper):
          [1, 0, 0],
          [0, 1, 0]]
     ).T
-    rot, trans = rigid_transform_3D(point_set_A, point_set_B)
+    rot, trans = rigid_transform_3d(point_set_A, point_set_B)
 
     return rot, trans
 
@@ -244,7 +244,7 @@ if __name__ == '__main__':
     ]
 
     # The path to the multi-cal calibration.json file.
-    cam_info = CameraInfo(r'C:\Users\robotflow\Desktop\fast-cloth-pose\data\cali_20230301_174120\calibration.json')
+    cam_info = MulticalCameraInfo(r'C:\Users\robotflow\Desktop\fast-cloth-pose\data\cali_20230301_174120\calibration.json')
 
     # The path to the recording folder.
     BASE_PATH = r'C:\Users\robotflow\Desktop\fast-cloth-pose\data\20230301_215214'
@@ -272,7 +272,7 @@ if __name__ == '__main__':
                 color = cv2.imread(color_img_path)[:, :, ::-1]
                 depth_img_path = depth_img_path_collection[camera][img_idx]
                 depth = cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
-                # color_mask, ret = get_chroma_mask_2d(color)
+                # color_mask, err = get_chroma_mask_2d(color)
                 # color = apply_mask(color, color_mask)
                 # depth = apply_mask(depth, color_mask)
                 # cv2.imshow("color_mask", color_mask)
@@ -301,8 +301,8 @@ if __name__ == '__main__':
                 # cv2.waitKey(0)
 
                 # pc = RSPointCloudHelper(color, depth, cam_info.get_extrinsic(camera), camera_intrinsic_path=f'D:/Temp/articulated/intrinsics/{camera}.json')
-                pc = RSPointCloudHelper(color, depth, camera_intrinsic_desc=(cam_info.get_resolution(camera)[0], cam_info.get_resolution(camera)[1], cam_info.get_intrinsic(camera)),
-                                        camera_intrinsic_path=None, transform=cam_info.get_extrinsic(camera))
+                pc = PointCloudHelper(color, depth, camera_intrinsic_desc=(cam_info.get_resolution(camera)[0], cam_info.get_resolution(camera)[1], cam_info.get_intrinsic(camera)),
+                                      camera_intrinsic_path=None, transform=cam_info.get_extrinsic(camera))
                 # pc.vis()
 
                 raw_pc_by_camera[camera] = pc

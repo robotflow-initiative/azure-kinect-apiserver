@@ -59,14 +59,14 @@ def single_shot(tag: str, index: int, save: bool = True):
     """
     global APPLICATION
     if save:
-        _, _, index, ret = APPLICATION.single_shot(tag, index)
-        return make_response(200, single_shot=APPLICATION.state['single_shot'], depth=None, color=None, index=index, ret=str(ret))
+        _, _, index, err = APPLICATION.single_shot(tag, index)
+        return make_response(200, single_shot=APPLICATION.state['single_shot'], depth=None, color=None, index=index, err=str(err))
     else:
         # 4 x 2160p color + depth consumes 210M bandwidth
         # TODO: use a better way to transfer data
-        color_frames, depth_frames, index, ret = APPLICATION.single_shot_mem(tag, index)
+        color_frames, depth_frames, index, err = APPLICATION.single_shot_mem(tag, index)
         return make_response(200, single_shot=APPLICATION.state['single_shot'], depth=base64.b64encode(pickle.dumps(depth_frames)), color=base64.b64encode(pickle.dumps(color_frames)), index=index,
-                             ret=str(ret))
+                             ret=str(err))
 
 
 @controller.delete("/v1/azure/single_shot")
@@ -80,16 +80,17 @@ def stop_single_shot():
 def start_recording(tag: str):
     global APPLICATION
     ret = APPLICATION.start_recording(tag)
-    return make_response(200, message="recording started", recording=APPLICATION.state['recording'], ret=str(ret))
+    return make_response(200, message="recording started", recording=APPLICATION.state['recording'], err=str(ret))
 
 
 @controller.post("/v1/azure/stop")
 def stop_recording():
     global APPLICATION
     ret = APPLICATION.stop_recording()
-    return make_response(200, message="recording stopped", recording=APPLICATION.state['recording'], ret=str(ret))
+    return make_response(200, message="recording stopped", recording=APPLICATION.state['recording'], err=str(ret))
 
 
+# noinspection PyUnresolvedReferences
 def main(args):
     global APPLICATION
     logging.basicConfig(level=logging.INFO)
@@ -120,6 +121,7 @@ def main(args):
         if APPLICATION.state['single_shot']:
             APPLICATION.logger.info(f"exit single shot mode")
             APPLICATION.exit_single_shot_mode()
+        # noinspection PyProtectedMember
         os._exit(1)
 
 

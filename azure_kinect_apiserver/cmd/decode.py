@@ -40,7 +40,7 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
                                       examine_n_frames: int = 600,
                                       maximum_no_detect_count: int = 30,
                                       debug: bool = True) -> Tuple[float, Optional[Exception]]:
-    # Read meta data and check if all color images are present
+    # Read metadata and check if all color images are present
     _color_img_path_collection = sorted(glob.glob(os.path.join(tagged_path, cam_name, 'color', '*.jpg')), key=lambda x: int(osp.splitext(osp.basename(x))[0]))
     color_img_meta = pd.read_csv(os.path.join(tagged_path, cam_name, 'meta.csv'))
     assert len(color_img_meta) == len(_color_img_path_collection), f"len(color_img_meta)={len(color_img_meta)}"
@@ -89,14 +89,14 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
         return timestamp_offset, None
 
 
-def mkv_worker(data_dir: str):
-    files = glob.glob(data_dir + "/*.mkv")
+def mkv_worker(kinect_dir: str):
+    files = glob.glob(kinect_dir + "/*.mkv")
     names = [osp.basename(f).split('.')[0] for f in files]
     wrappers = [
         mkv_record_wrapper(f) for f in files
     ]
     m = StateMachine(names)
-    t = threading.Thread(target=state_machine_save_thread_v1, args=(m, data_dir, names))
+    t = threading.Thread(target=state_machine_save_thread_v1, args=(m, kinect_dir, names))
     t.start()
     with tqdm.tqdm() as pbar:
         num_closed = 0
@@ -104,9 +104,10 @@ def mkv_worker(data_dir: str):
             frame_futures: Dict[str, Optional[concurrent.futures.Future]] = {k: None for k in names}
             for idx, w in enumerate(wrappers):
                 try:
-                    frame_futures[names[idx]], ret = next(w)
-                    if ret is not None:
-                        raise ret
+                    # noinspection PyTypeChecker
+                    frame_futures[names[idx]], err = next(w)
+                    if err is not None:
+                        raise err
                 except StopIteration:
                     num_closed += 1
                     continue
@@ -123,16 +124,16 @@ def mkv_worker(data_dir: str):
         t.join()
 
     for i, file in enumerate(files):
-        with open(osp.join(data_dir, names[i], f"calibration.kinect.json"), "w") as f:
+        with open(osp.join(kinect_dir, names[i], f"calibration.kinect.json"), "w") as f:
             json.dump(get_mkv_record_calibration(file)[0], f, indent=4, sort_keys=True)
 
     metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
-    master_camera = list(filter(lambda x: x[1]['is_master'] == True, metadata['recordings'].items()))[0][0]
-    ts, ret = get_timestamp_offset_from_decoded(tagged_path=data_dir, cam_name=master_camera, debug=False)
-    if ret is not None:
-        raise ret
+    master_camera = list(filter(lambda x: x[1]['is_master'] is True, metadata['recordings'].items()))[0][0]
+    ts, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=master_camera, debug=False)
+    if err is not None:
+        raise err
     metadata['system_timestamp_offset'] = ts
-    with open(osp.join(data_dir, "meta.json"), "w") as f:
+    with open(osp.join(kinect_dir, "meta.json"), "w") as f:
         json.dump(metadata, f, indent=4, sort_keys=True)
 
 
@@ -141,7 +142,9 @@ def main(args: argparse.Namespace):
     logger = logging.getLogger("azure_kinect_apiserver.cmd.decode")
     logger.info("processing directory: {}".format(osp.realpath(args.data_dir)))
 
-    return mkv_worker(args.data_dir)
+    kinect_dir = osp.join(args.data_dir, "kinect")
+
+    return mkv_worker(kinect_dir)
 
 
 def entry_point(argv):

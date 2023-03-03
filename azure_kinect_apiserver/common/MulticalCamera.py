@@ -7,7 +7,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("azure_kinect_apiserver.common.multical_camera")
 
 
-class CameraInfo:
+# noinspection PyPep8Naming
+class MulticalCameraInfo:
     valid: bool
     master_cam: str
     camera_info: dict

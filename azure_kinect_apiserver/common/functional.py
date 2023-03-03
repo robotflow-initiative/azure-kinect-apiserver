@@ -35,7 +35,7 @@ def probe_device(exec_path: str):
     for device_string in output:
         try:
             device = device_string.split('\t')
-            result = dict()
+            result = {}
             for device_property in device:
                 device_property_list = device_property.split(':')
                 result[device_property_list[0]] = device_property_list[1]
@@ -62,7 +62,7 @@ __FAKE_COLORS__ = [
 
 
 def vis_pcds(transformed_pcd_list, fake_color=False):
-    coordinate = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+    coordinate = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.5, origin=[0, 0, 0])
     transformed_pcd_all = o3d.geometry.PointCloud()
     xyz_list = [np.asarray(pcd.points) for pcd in transformed_pcd_list]
     if fake_color:
@@ -113,12 +113,11 @@ def save_pcds(transformed_pcd_list, save_path, seperate=True, fake_color=False, 
             xyz = np.asarray(transformed_pcd_all.points)
             rgb = np.asarray(transformed_pcd_all.colors)
 
-            # NOTICE: The following lines are to purge the points that is outside of the workspace
+            # NOTICE: The following lines are to purge the points that is outside the workspace
             # Comment out them if they are unwanted!
             # mask = (xyz[:, 0] > 0.35) & (xyz[:, 0] < 0.95) & (xyz[:, 1] > -0.5) & (xyz[:, 1] < 0.5) & (xyz[:, 2] > 0.03) & (xyz[:, 2] < 0.4)
             # xyz = xyz[mask]
             # rgb = rgb[mask]
-
 
             masked_pcd = o3d.geometry.PointCloud()
             masked_pcd.points = o3d.utility.Vector3dVector(xyz)
@@ -141,7 +140,7 @@ def save_pcds(transformed_pcd_list, save_path, seperate=True, fake_color=False, 
         xyz = np.asarray(transformed_pcd_all.points)
         rgb = np.asarray(transformed_pcd_all.colors)
 
-        # NOTICE: The following lines are to purge the points that is outside of the workspace
+        # NOTICE: The following lines are to purge the points that is outside the workspace
         # Comment out them if they are unwanted!
         # mask = (xyz[:, 0] > 0.35) & (xyz[:, 0] < 0.95) & (xyz[:, 1] > -0.5) & (xyz[:, 1] < 0.5) & (xyz[:, 2] > 0.03) & (xyz[:, 2] < 0.4)
         # xyz = xyz[mask]
@@ -153,7 +152,8 @@ def save_pcds(transformed_pcd_list, save_path, seperate=True, fake_color=False, 
         o3d.io.write_point_cloud(os.path.join('./output', f'{save_path}.ply'), masked_pcd)
 
 
-def rigid_transform_3D(A, B):
+# noinspection PyPep8Naming
+def rigid_transform_3d(A, B):
     """
     Input: expects 3xN matrix of points
     Returns R,t

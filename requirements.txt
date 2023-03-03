@@ -1,5 +1,5 @@
 pyyaml
-opencv-python
+opencv-python~=4.7.0
 numpy
 h5py
 tqdm
@@ -9,4 +9,4 @@ py-cli-interaction
 httpx
 open3d
 requests
-pyzbar
+pandas

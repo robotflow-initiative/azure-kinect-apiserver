@@ -16,7 +16,7 @@ from typing import Optional, Dict, Tuple
 import cv2
 import py_cli_interaction
 
-from azure_kinect_apiserver.common import CameraInfo, RSPointCloudHelper, vis_pcds
+from azure_kinect_apiserver.common import MulticalCameraInfo, PointCloudHelper, vis_pcds
 
 CONFIG_DOCKER_IMAGE = "davidliyutong/multical-docker"
 CONFIG_BOARD_YAML = """
@@ -103,7 +103,7 @@ def examine_multical_result(tagged_path: str):
                )
     )  # ["rxx", "ryy", "rzz"]
     calibration_json = osp.join(tagged_path, "calibration.json")
-    cam_info = CameraInfo(calibration_json)
+    cam_info = MulticalCameraInfo(calibration_json)
 
     color_img_path_collection = {
         cam_name: sorted(glob.glob(os.path.join(tagged_path, cam_name, 'color', '*.jpg')), key=lambda x: int(osp.splitext(osp.basename(x))[0])) for cam_name in cameras_name_list
@@ -123,13 +123,13 @@ def examine_multical_result(tagged_path: str):
             # undistort
             cam_matrix = cam_info.get_intrinsic(camera)
             cam_dist = cam_info.get_distort(camera)
-            color_undist = cv2.undistort(color_img, cam_matrix, cam_dist)
-            depth_undist = cv2.undistort(depth_img, cam_matrix, cam_dist)
+            color_undistort = cv2.undistort(color_img, cam_matrix, cam_dist)
+            depth_undistort = cv2.undistort(depth_img, cam_matrix, cam_dist)
 
-            pc = RSPointCloudHelper(color_undist,
-                                    depth_undist,
-                                    camera_intrinsic_desc=(cam_info.get_resolution(camera)[0], cam_info.get_resolution(camera)[1], cam_info.get_intrinsic(camera)),
-                                    transform=cam_info.get_extrinsic(camera))
+            pc = PointCloudHelper(color_undistort,
+                                  depth_undistort,
+                                  camera_intrinsic_desc=(cam_info.get_resolution(camera)[0], cam_info.get_resolution(camera)[1], cam_info.get_intrinsic(camera)),
+                                  transform=cam_info.get_extrinsic(camera))
             raw_pc_by_camera[camera] = pc
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list], fake_color=True)
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list])
@@ -144,9 +144,9 @@ def entry_point(argv):
         print("Usage: python -m azure_kinect_apiserver multical <path>")
         return
     else:
-        res, ret = run_multical_with_docker(argv[0])
-        if ret is not None:
-            print(ret)
+        res, err = run_multical_with_docker(argv[0])
+        if err is not None:
+            print(err)
         else:
             print(res)
             logging.info("examining camera extrinsics")

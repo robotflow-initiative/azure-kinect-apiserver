@@ -21,6 +21,7 @@ logger = logging.getLogger('azure_kinect_apiserver.app')
 pykinect.initialize_libraries()
 
 
+# noinspection PyShadowingNames
 class Application:
     option: KinectSystemCfg = None
     state: Dict[str, bool] = None
@@ -62,7 +63,7 @@ class Application:
             if tag is None or tag == "":
                 tag = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
-            record_path = osp.join(self.option.data_path, tag)
+            record_path = osp.join(self.option.data_path, tag, 'kinect')
             if not osp.exists(record_path):
                 os.makedirs(record_path, exist_ok=True)
 
@@ -136,9 +137,9 @@ class Application:
             return None
 
     def list_device(self) -> Tuple[List[Dict], Optional[Exception]]:
-        res, ret = probe_device(self.option.exec_path)
-        if ret is not None:
-            return res, ret
+        res, err = probe_device(self.option.exec_path)
+        if err is not None:
+            return res, err
         else:
             self.device_list_info_cache = res
             return res, None
@@ -177,11 +178,11 @@ class Application:
             self.lock.release()
 
             if self.device_list_info_cache is None:
-                res, ret = self.list_device()
-                if ret is None:
+                res, err = self.list_device()
+                if err is None:
                     device_info_list = res
                 else:
-                    return ret
+                    return err
             else:
                 device_info_list = self.device_list_info_cache
 
@@ -246,8 +247,7 @@ class Application:
                     current_depth_frame)
         # load method: cv2.imread('path', cv2.IMREAD_UNCHANGED)
 
-    def single_shot(self, tag: str, index: int) -> Tuple[
-        List[Optional[np.ndarray]], List[Optional[np.ndarray]], int, Optional[Exception]]:
+    def single_shot(self, tag: str, index: int) -> Tuple[List[Optional[np.ndarray]], List[Optional[np.ndarray]], int, Optional[Exception]]:
         if tag is None or tag == "":
             return [], [], -1, Exception("tag is empty")
 
@@ -293,8 +293,7 @@ class Application:
 
         return current_frames, current_depth_frames, index, None
 
-    def single_shot_mem(self, tag: str, index: int) -> Tuple[
-        List[Optional[np.ndarray]], List[Optional[np.ndarray]], int, Optional[Exception]]:
+    def single_shot_mem(self, tag: str, index: int) -> Tuple[List[np.ndarray], List[np.ndarray], int, Optional[Exception]]:
         if tag is None or tag == "":
             return [], [], -1, Exception("tag is empty")
 
@@ -314,6 +313,7 @@ class Application:
 
 if __name__ == '__main__':
     import time
+    import tqdm
 
     cfg = KinectSystemCfg('manifests/azure_kinect_config/azure_kinect_config.yaml')
 

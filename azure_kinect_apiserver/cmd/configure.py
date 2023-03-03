@@ -1,12 +1,19 @@
+import argparse
 from azure_kinect_apiserver.common import KinectSystemCfg
 
 
 def main(args):
-    KinectSystemCfg.configure_from_keyboard()
+    print(args)
+    try:
+        KinectSystemCfg.configure_from_keyboard()
+    except KeyboardInterrupt:
+        print("got KeyboardInterrupt")
 
 
 def entry_point(argv):
-    main(None)
+    parser = argparse.ArgumentParser()
+    parser.parse_args(argv)
+    main(argv)
 
 
 if __name__ == '__main__':

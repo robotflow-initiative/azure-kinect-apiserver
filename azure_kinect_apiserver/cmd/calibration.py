@@ -34,9 +34,9 @@ def interaction_loop(app: Application):
     print("--------\nPress 's' or Enter to take a single shot, 'c' or space to refresh preview, 'q' or ESC to quit\n--------")
     index = 0
     while True:
-        color_frames, depth_frames, _, ret = app.single_shot_mem(tag, index)
-        if ret is not None:
-            logging.error(f"error: {ret}")
+        color_frames, depth_frames, _, err = app.single_shot_mem(tag, index)
+        if err is not None:
+            logging.error(f"error: {err}")
             break
 
         color_preview = np.vstack([x[::8, ::8, :] for x in color_frames])

@@ -6,7 +6,7 @@ POINT_DEPTH_SCALE_NORMAL = 1
 POINT_DEPTH_SCALE_L515 = 0.25
 
 
-class RSPointCloudHelper:
+class PointCloudHelper:
     def __init__(self, rgb, depth, depth_scale=None, camera_intrinsic_desc: Tuple[int, int, Union[List[List[float]], np.ndarray]] = None, camera_intrinsic_path=None, transform=None,
                  computed: bool = True, *args, **kwargs) -> None:
         if camera_intrinsic_desc is None:
@@ -66,13 +66,15 @@ class RSPointCloudHelper:
             depth_raw = o3d.geometry.Image(depth_raw.astype(np.uint16))
         if isinstance(camera_intrinsic, tuple):
             width, height, intrinsic_matrix = camera_intrinsic
-            camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(int(width), int(height), intrinsic_matrix[0][0], intrinsic_matrix[1][1], intrinsic_matrix[0, 2], intrinsic_matrix[1, 2])
+            camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(int(width), int(height), intrinsic_matrix[0][0], intrinsic_matrix[1][1], intrinsic_matrix[0][2], intrinsic_matrix[1][2])
 
-        rgbd_image = o3d.geometry.RGBDImage().create_from_color_and_depth(color_raw,
-                                               depth_raw,
-                                               depth_scale,
-                                               depth_trunc,
-                                               convert_rgb_to_intensity=False)
+        rgbd_image = o3d.geometry.RGBDImage().create_from_color_and_depth(
+            color_raw,
+            depth_raw,
+            depth_scale,
+            depth_trunc,
+            convert_rgb_to_intensity=False
+        )
 
         pcd = o3d.geometry.PointCloud().create_from_rgbd_image(
             image=rgbd_image,
