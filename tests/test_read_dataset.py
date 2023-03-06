@@ -8,7 +8,7 @@ print(len(dataset))
 print(dataset.start_idx)
 print(dataset[0])
 for i in range(dataset.start_idx, len(dataset)):
-    point_cloud, marker_detection, force_data, point_cloud_status, marker_status, force_status = dataset[i]
+    point_cloud, marker_detection, force_data, point_cloud_status, marker_status, force_status, ts = dataset[i]
     if point_cloud_status and marker_status and force_status:
 
         base_coordinate = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.3, origin=[0, 0, 0])  # to plot the base coordinate
@@ -25,4 +25,4 @@ for i in range(dataset.start_idx, len(dataset)):
         merged_pcd.points = o3d.utility.Vector3dVector(np.concatenate(_xyz_list, axis=0))
         merged_pcd.colors = o3d.utility.Vector3dVector(np.concatenate(_rgb_list, axis=0))
         o3d.visualization.draw_geometries([base_coordinate] + marker_coordinates + [merged_pcd])
-        print(force_data)
+        print(force_data, ts)

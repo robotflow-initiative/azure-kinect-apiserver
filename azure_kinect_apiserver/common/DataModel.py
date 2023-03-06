@@ -4,7 +4,7 @@ import os
 import os.path as osp
 import glob
 import pickle
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -35,7 +35,7 @@ class AzureKinectDataset:
     camera_parameter_collection: Dict[str, Dict[str, Any]] = None
     point_cloud_path_collection: List[Dict[str, str]] = None
     marker_detections: Dict[str, np.ndarray] = None
-    kinect_timestamps: np.ndarray = None
+    kinect_timestamps_unix: np.ndarray = None
 
     def __post_init__(self):
         if self.multical_calibration_path is not None:
@@ -66,7 +66,7 @@ class AzureKinectDataset:
         if self.status < STATUS_DECODED:
             return 0
         else:
-            return np.where(self.kinect_timestamps > self.get_system_action_start_timestamp())[0][0]
+            return np.where(self.kinect_timestamps_unix > self.get_system_action_start_timestamp())[0][0]
 
     def _probe_dataset_status(self) -> int:
         status = STATUS_INVALID
@@ -118,7 +118,7 @@ class AzureKinectDataset:
             self.camera_parameter_collection = {
                 cam_name: json.load(open(osp.join(self.kinect_path, cam_name, 'calibration.kinect.json'))) for cam_name in self.camera_name_list
             }
-            self.kinect_timestamps = self.camera_metadata_collection[self.master_camera_name]['color_dev_ts_usec'].to_numpy() * 1e-6 + self.get_system_timestamp_offset()
+            self.kinect_timestamps_unix = self.camera_metadata_collection[self.master_camera_name]['color_dev_ts_usec'].to_numpy() * 1e-6 + self.get_system_timestamp_offset()
 
         if self.status > STATUS_DECODED:
             point_cloud_path_list = glob.glob(osp.join(self.kinect_path, 'pcd_s3', "*.ply"))
@@ -199,19 +199,21 @@ class ArizonForceDataset:
 @dataclasses.dataclass()
 class JointPointCloudDataset:
     path: str
+    time_origin_arizon_minus_kinect_in_sec: float = 0.0
 
     def __post_init__(self):
         self.kinect_dataset = AzureKinectDataset(osp.join(self.path, 'kinect'))
         self.arizon_dataset = ArizonForceDataset(osp.join(self.path, 'arizon'))
         self.kinect_dataset.load()
-        self.arizon_dataset.compute_interpolated_force(self.kinect_dataset.kinect_timestamps)
-        assert len(self.kinect_dataset) == len(self.arizon_dataset) == len(self.kinect_dataset.kinect_timestamps)
+        self.arizon_dataset.compute_interpolated_force(self.kinect_dataset.kinect_timestamps_unix + self.time_origin_arizon_minus_kinect_in_sec)
+        assert len(self.kinect_dataset) == len(self.arizon_dataset) == len(self.kinect_dataset.kinect_timestamps_unix)
         self._length = len(self.kinect_dataset)
+        self.timestamps = self.kinect_dataset.kinect_timestamps_unix
 
     def __len__(self):
         return self._length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, np.ndarray], bool, bool, bool, float]:
         point_cloud_paths = self.kinect_dataset.point_cloud_path_collection[idx]
         marker_detections = {k: v[idx]
                              for k, v in self.kinect_dataset.marker_detections.items()}
@@ -239,7 +241,8 @@ class JointPointCloudDataset:
                 [
                     v is not None for v in force.values()
                 ]
-            )
+            ),
+            self.timestamps[idx]
         )
 
     @property
