@@ -12,7 +12,7 @@ import json
 import cv2
 import numpy as np
 
-from azure_kinect_apiserver.common import KinectSystemCfg, probe_device
+from azure_kinect_apiserver.common import KinectSystemCfg, probe_device, MulticalCameraInfo
 from azure_kinect_apiserver.thirdparty import pykinect
 
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +32,7 @@ class Application:
     device_list: Optional[List[pykinect.Device]] = None
     calibrations: Optional[Dict[str, pykinect.Calibration]] = None
     serial_map: Optional[Dict[int, str]] = None
+    multical_calibration: Optional[MulticalCameraInfo] = None
 
     recording_processes: List[subprocess.Popen] = None
 
@@ -47,6 +48,7 @@ class Application:
         self.device_list_info_cache = None
         self.device_list = None
         self.serial_map = None
+        self.multical_calibration = None
 
         self.recording_processes = []
 
@@ -66,6 +68,9 @@ class Application:
             record_path = osp.join(self.option.data_path, tag, 'kinect')
             if not osp.exists(record_path):
                 os.makedirs(record_path, exist_ok=True)
+
+            if self.multical_calibration is not None:
+                self.multical_calibration.save_to_json(osp.join(record_path, "calibration.json"))
 
             # for process in procs:
             #     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
@@ -145,7 +150,6 @@ class Application:
             return res, None
 
     def __get_device_config__(self, index: int) -> pykinect.Configuration:
-        # TODO: Implement this function
         if self.option is None or self.option.camera_options is None or len(self.option.camera_options) <= index:
             device_config = pykinect.default_configuration
             device_config.wired_sync_mode = pykinect.K4A_WIRED_SYNC_MODE_STANDALONE
@@ -293,10 +297,7 @@ class Application:
 
         return current_frames, current_depth_frames, index, None
 
-    def single_shot_mem(self, tag: str, index: int) -> Tuple[List[np.ndarray], List[np.ndarray], int, Optional[Exception]]:
-        if tag is None or tag == "":
-            return [], [], -1, Exception("tag is empty")
-
+    def single_shot_mem(self, tag: Optional[str], index: int) -> Tuple[List[np.ndarray], List[np.ndarray], int, Optional[Exception]]:
         if not self.state["single_shot"]:
             err = self.enter_single_shot_mode()
             if err is not None:
@@ -309,6 +310,14 @@ class Application:
             self.__retrieve_frame__(self.device_list, current_frames, current_depth_frames, i)
 
         return current_frames, current_depth_frames, index, None
+
+    def load_mulitcal_calibration(self, calibration_file: str):
+        self.multical_calibration = MulticalCameraInfo(calibration_file)
+        if not self.multical_calibration.valid:
+            self.logger.warning("invalid multical calibration file")
+            self.multical_calibration = None
+        else:
+            self.logger.info("load multical calibration file")
 
 
 if __name__ == '__main__':

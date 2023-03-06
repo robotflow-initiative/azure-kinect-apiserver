@@ -88,92 +88,6 @@ def colored_point_cloud_registration(source, target):
     return result_icp.transformation
 
 
-def colored_point_cloud_registration_robust(source, target):
-    # o3d.visualization.draw_geometries([source, target])
-    voxel_radius = [0.04, 0.02, 0.01]
-    max_iter = [50, 30, 14]
-    current_transformation = np.identity(4)
-    print("3. Colored point cloud registration")
-    for scale in range(3):
-        iter = max_iter[scale] * 10
-        radius = voxel_radius[scale]
-
-        print("3-1. Estimate normal.")
-        source.estimate_normals(
-            o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
-        target.estimate_normals(
-            o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
-
-        voxel_size = radius * 5
-        print("3-2. Downsample with a voxel size %.2f" % voxel_size)
-        source_down = source.voxel_down_sample(voxel_size)
-        target_down = target.voxel_down_sample(voxel_size)
-        # fps_num = 2000
-        # source_down = source.farthest_point_down_sample(fps_num)
-        # target_down = target.farthest_point_down_sample(fps_num)
-
-        print("3-3. Applying colored point cloud registration")
-        result_icp = o3d.pipelines.registration.registration_colored_icp(
-            source_down, target_down, voxel_size, current_transformation,
-            o3d.pipelines.registration.TransformationEstimationForColoredICP(),
-            o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-6,
-                                                              relative_rmse=1e-6,
-                                                              max_iteration=iter))
-
-        # result_icp = o3d.pipelines.registration.registration_icp(
-        #     source_down, target_down, voxel_size, current_transformation,
-        #     o3d.pipelines.registration.TransformationEstimationPointToPlane(),
-        #     o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-6,
-        #                                                       relative_rmse=1e-6,
-        #                                                       max_iteration=iter))
-
-        source = source.transform(result_icp.transformation)
-        current_transformation = current_transformation @ result_icp.transformation
-        print("result_icp:", result_icp)
-        print("current_step_matrix:", result_icp.transformation)
-        print("accumulated_matrix:", current_transformation)
-        # print(result_icp.transformation)
-    # draw_registration_result_original_color(source, target, result_icp.transformation)
-    return current_transformation
-
-
-def colored_point_cloud_registration_naive(source, target):
-    # o3d.visualization.draw_geometries([source, target])
-    radius = 0.005
-    iter = 5000
-    init_transformation = np.identity(4)
-    print("3. Colored point cloud registration")
-
-    print("3-1. Estimate normal.")
-    source.estimate_normals(
-        o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
-    target.estimate_normals(
-        o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
-
-    voxel_size = radius * 5
-    print("3-2. Downsample with a voxel size %.2f" % voxel_size)
-    source_down = source.voxel_down_sample(voxel_size)
-    target_down = target.voxel_down_sample(voxel_size)
-
-    print("3-3. Applying colored point cloud registration")
-    vis_pcds([source_down])
-    vis_pcds([target_down])
-    vis_pcds([source_down, target_down])
-    result_icp = o3d.pipelines.registration.registration_colored_icp(
-        source_down, target_down, voxel_size * 2, init_transformation,
-        o3d.pipelines.registration.TransformationEstimationForColoredICP(),
-        o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-6,
-                                                          relative_rmse=1e-6,
-                                                          max_iteration=iter))
-
-    vis_pcds([source.transform(result_icp.transformation), target])
-    print("result_icp:", result_icp)
-    print("current_step_matrix:", result_icp.transformation)
-    # print(result_icp.transformation)
-    # draw_registration_result_original_color(source, target, result_icp.transformation)
-    return result_icp.transformation
-
-
 def get_chroma_mask_2d(img: np.ndarray, margin=50) -> Tuple[np.ndarray, Optional[Exception]]:
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
@@ -272,9 +186,9 @@ if __name__ == '__main__':
                 color = cv2.imread(color_img_path)[:, :, ::-1]
                 depth_img_path = depth_img_path_collection[camera][img_idx]
                 depth = cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
-                # color_mask, err = get_chroma_mask_2d(color)
-                # color = apply_mask(color, color_mask)
-                # depth = apply_mask(depth, color_mask)
+                color_mask, err = get_chroma_mask_2d(color)
+                color = apply_mask(color, color_mask)
+                depth = apply_mask(depth, color_mask)
                 # cv2.imshow("color_mask", color_mask)
                 # cv2.waitKey()
 

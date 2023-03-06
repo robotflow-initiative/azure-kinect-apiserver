@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import pandas as pd  # TODO: remove pandas dependency
 import tqdm
+import plyer
 
 from azure_kinect_apiserver.decoder import (
     mkv_record_wrapper,
@@ -21,6 +22,9 @@ from azure_kinect_apiserver.decoder import (
     get_mkv_record_meta,
     get_mkv_record_calibration,
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("azure_kinect_apiserver.cmd.decode")
 
 
 def compute_timestamp_offset(calibration_pairs: List[Tuple[int, str]]):
@@ -31,7 +35,7 @@ def compute_timestamp_offset(calibration_pairs: List[Tuple[int, str]]):
         )
     ))
     timestamp_offset = np.mean(calibration_pairs[:, 1] - calibration_pairs[:, 0])
-    logging.info(f"calibration pairs:\n {calibration_pairs}")
+    logger.info(f"calibration pairs:\n {calibration_pairs}")
     return float(timestamp_offset)
 
 
@@ -39,7 +43,7 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
                                       cam_name: str,
                                       examine_n_frames: int = 600,
                                       maximum_no_detect_count: int = 30,
-                                      debug: bool = True) -> Tuple[float, Optional[Exception]]:
+                                      debug: bool = True) -> Tuple[float, float, Optional[Exception]]:
     # Read metadata and check if all color images are present
     _color_img_path_collection = sorted(glob.glob(os.path.join(tagged_path, cam_name, 'color', '*.jpg')), key=lambda x: int(osp.splitext(osp.basename(x))[0]))
     color_img_meta = pd.read_csv(os.path.join(tagged_path, cam_name, 'meta.csv'))
@@ -73,7 +77,7 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
                     else:
                         calibration_pairs.append((color_img_meta['basename'][img_idx], data))
                         last_qrcode_data = data
-                        logging.debug(f"found calibration pair: {color_img_meta['basename'][img_idx]} -> {data}")
+                        logger.debug(f"found calibration pair: {color_img_meta['basename'][img_idx]} -> {data}")
                 else:
                     last_qrcode_data = data
             else:
@@ -81,12 +85,12 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
                     no_detect_count += 1
             pbar.update(1)
     if len(calibration_pairs) < 2:
-        logging.error(f"found {len(calibration_pairs)} calibration pairs, which is less than 2")
-        return 0, Exception("found less than 2 calibration pairs")
+        logger.error(f"found {len(calibration_pairs)} calibration pairs, which is less than 2")
+        return 0, 0, Exception("found less than 2 calibration pairs")
     else:
         timestamp_offset = compute_timestamp_offset(calibration_pairs)
-        logging.info(f"found {len(calibration_pairs)} calibration pairs, timestamp offset is {timestamp_offset}")
-        return timestamp_offset, None
+        logger.info(f"found {len(calibration_pairs)} calibration pairs, timestamp offset is {timestamp_offset}")
+        return timestamp_offset, datetime.datetime.strptime(calibration_pairs[-1][-1], "%Y-%m-%d_%H:%M:%S.%f").timestamp(), None
 
 
 def mkv_worker(kinect_dir: str):
@@ -129,17 +133,17 @@ def mkv_worker(kinect_dir: str):
 
     metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
     master_camera = list(filter(lambda x: x[1]['is_master'] is True, metadata['recordings'].items()))[0][0]
-    ts, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=master_camera, debug=False)
+    ts, ts_action_start, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=master_camera, debug=False)
     if err is not None:
         raise err
     metadata['system_timestamp_offset'] = ts
+    metadata['system_action_start_timestamp'] = ts_action_start
+
     with open(osp.join(kinect_dir, "meta.json"), "w") as f:
         json.dump(metadata, f, indent=4, sort_keys=True)
 
 
 def main(args: argparse.Namespace):
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("azure_kinect_apiserver.cmd.decode")
     logger.info("processing directory: {}".format(osp.realpath(args.data_dir)))
 
     kinect_dir = osp.join(args.data_dir, "kinect")
@@ -149,8 +153,20 @@ def main(args: argparse.Namespace):
 
 def entry_point(argv):
     if len(argv) < 1:
-        print("Usage: python -m azure_kinect_apiserver decode <path>")
-        return 1
+        try:
+            f = plyer.filechooser.choose_dir(title="Select a recording")
+            if len(f) > 0:
+                args = argparse.Namespace()
+                args.data_dir = f[0]
+                return main(args)
+            else:
+                logger.info("abort")
+                return 1
+        except Exception as err:
+            logger.error(f"error: {err}")
+            print("Usage: python -m azure_kinect_apiserver decode <path>")
+            return 1
+
     else:
         data_dir = argv[0]
         args = argparse.Namespace()

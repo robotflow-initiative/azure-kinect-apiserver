@@ -2,3 +2,4 @@ from .Config import KinectCameraCfg, KinectSystemCfg, probe_device, generate_scr
 from .functional import *
 from .MulticalCamera import MulticalCameraInfo
 from .point import PointCloudHelper
+from .DataModel import AzureKinectDataset

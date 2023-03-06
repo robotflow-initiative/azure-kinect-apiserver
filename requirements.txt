@@ -10,3 +10,4 @@ httpx
 open3d
 requests
 pandas
+plyer

@@ -32,15 +32,6 @@ Set-Item Env:PATH "$Env:PATH;/path/to/azure-kinect-sdk/"
     python -m azure_kinect_apiserver configure
     ```
 
-- Run APIServer:
-
-    ```shell
-    python -m azure_kinect_apiserver apiserver --config=<path_to_config>
-    ```
-    
-    Navigate to `http://localhost:<api_port>` to view the Swagger UI.
-    
-
 - Run local calibration capture to capture image for calibration:
     
     ```shell
@@ -53,6 +44,23 @@ Set-Item Env:PATH "$Env:PATH;/path/to/azure-kinect-sdk/"
     ```shell
     python -m azure_kinect_apiserver multical --config=<path_to_config>
     ```
+
+
+- Run APIServer:
+
+    ```shell
+    python -m azure_kinect_apiserver apiserver --config=<path_to_config> --multical_calibration=<path_to_multical_calibration>
+    ```
+  
+    > `path_to_multical_calibration` is optional, it is path to possibly existing multical calibration file/directory. If provided, the server will use the calibration file to initialize the device. Otherwise, the server will copy it to tagged recording path
+    
+    For example:
+
+    ```shell
+    python -m azure_kinect_apiserver apiserver --config=./config.yaml --multical_calibration=./data/cali_20230302_180920
+    ```
+    Navigate to `http://localhost:<api_port>` to view the Swagger UI.
+    
 
 - Decode MKV files to synchronized images and depth map sequences:
     ```shell

@@ -20,7 +20,13 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
 import yaml
-from py_cli_interaction import must_parse_cli_int, must_parse_cli_string, must_parse_cli_bool, must_parse_cli_sel
+from py_cli_interaction import (
+    must_parse_cli_int,
+    must_parse_cli_string,
+    must_parse_cli_bool,
+    must_parse_cli_sel,
+    must_parse_cli_float,
+)
 
 from .functional import probe_device
 
@@ -136,6 +142,10 @@ class KinectSystemCfg(BaseCfg):
     length_sec: int = 0
     camera_options: List[KinectCameraCfg] = []
 
+    marker_valid_ids: List[str]
+    marker_length_m: float
+    marker_type: str
+
     def __init__(self, config_path: str):
         self.config_path = config_path
         try:
@@ -160,6 +170,11 @@ class KinectSystemCfg(BaseCfg):
             'debug': self.debug,
             'length_sec': self.length_sec,
             'camera_options': [cfg.get_dict() for cfg in self.camera_options],
+            'marker': {
+                'valid_ids': self.marker_valid_ids,
+                'length': self.marker_length_m,
+                'type': self.marker_type,
+            }
         }
 
     def load_dict(self, src: Dict[str, Any]) -> None:
@@ -180,6 +195,11 @@ class KinectSystemCfg(BaseCfg):
                 self.camera_options.append(new_opt)
         else:
             self.camera_options = []
+
+        if 'marker' in src.keys():
+            self.marker_valid_ids = src['marker']['valid_ids'] if 'valid_ids' in src['marker'].keys() else []
+            self.marker_length_m = src['marker']['length'] if 'length' in src['marker'].keys() else -1
+            self.marker_type = src['marker']['type'] if 'type' in src['marker'].keys() else ''
 
     @property
     def valid(self) -> bool:
@@ -255,6 +275,27 @@ class KinectSystemCfg(BaseCfg):
             sync_mode = 2
             sync_delay_usec = must_parse_cli_int('Sync Delay (us)', default_value=0)
             exposure = must_parse_cli_int('Exposure, -12 for auto exposure', min=-12, max=1, default_value=-12)
+            marker_length = must_parse_cli_float('Marker Length (m)', default_value=0.01)
+            _marker_type_candidates = [
+                'DICT_4X4_100',
+                'DICT_4X4_1000',
+                'DICT_4X4_250',
+                'DICT_4X4_50',
+                'DICT_5X5_100',
+                'DICT_5X5_1000',
+                'DICT_5X5_250',
+                'DICT_5X5_50',
+                'DICT_6X6_100',
+                'DICT_6X6_1000',
+                'DICT_6X6_250',
+                'DICT_6X6_50',
+                'DICT_7X7_100',
+                'DICT_7X7_1000',
+                'DICT_7X7_250',
+                'DICT_7X7_50',
+            ]
+            _marker_type_sel = must_parse_cli_sel('Marker Type', _marker_type_candidates, default_value=0)
+            marker_type = _marker_type_candidates[_marker_type_sel]
 
             camera_options = [
                 {
@@ -281,7 +322,12 @@ class KinectSystemCfg(BaseCfg):
                         'interface': api_interface,
                     },
                     'debug': debug,
-                    'camera_options': camera_options
+                    'camera_options': camera_options,
+                    'marker': {
+                        'valid_ids': [],
+                        'length': marker_length,
+                        'type': marker_type
+                    }
                 }
             }
 

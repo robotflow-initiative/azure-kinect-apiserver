@@ -7,7 +7,13 @@ POINT_DEPTH_SCALE_L515 = 0.25
 
 
 class PointCloudHelper:
-    def __init__(self, rgb, depth, depth_scale=None, camera_intrinsic_desc: Tuple[int, int, Union[List[List[float]], np.ndarray]] = None, camera_intrinsic_path=None, transform=None,
+    def __init__(self,
+                 rgb,
+                 depth,
+                 depth_scale=None,
+                 camera_intrinsic_desc: Tuple[int, int, Union[List[List[float]], np.ndarray]] = None,
+                 camera_intrinsic_path=None,
+                 transform=None,
                  computed: bool = True, *args, **kwargs) -> None:
         if camera_intrinsic_desc is None:
             self.camera_intrinsic = o3d.io.read_pinhole_camera_intrinsic(camera_intrinsic_path)

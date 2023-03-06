@@ -6,6 +6,13 @@ import cv2
 import numpy as np
 import open3d as o3d
 
+from typing import Tuple, Optional, List, Iterable
+
+from .point import PointCloudHelper
+
+import py_cli_interaction
+
+logger = logging.getLogger('azure_kinect_apiserver.common.functional')
 
 def clip_depth_image(depth_image: np.ndarray, min_depth: int = 0, max_depth: int = 10000) -> np.ndarray:
     """Converts a depth image to a color image.
@@ -210,10 +217,173 @@ def rigid_transform_3d(A, B):
 
     # special reflection case
     if np.linalg.det(R) < 0:
-        print("det(R) < R, reflection detected!, correcting for it ...")
+        logger.debug("det(R) < R, reflection detected!, correcting for it ...")
         Vt[2, :] *= -1
         R = Vt.T @ U.T
 
     t = -R @ centroid_A + centroid_B
 
     return R, t
+
+
+def colored_point_cloud_registration_robust(source, target):
+    # o3d.visualization.draw_geometries([source, target])
+    voxel_radius = [0.04, 0.02, 0.01]
+    max_iter = [50, 30, 14]
+    current_transformation = np.identity(4)
+    logger.debug("3. Colored point cloud registration")
+    for scale in range(3):
+        iter = max_iter[scale] * 10
+        radius = voxel_radius[scale]
+
+        logger.debug("3-1. Estimate normal.")
+        source.estimate_normals(
+            o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
+        target.estimate_normals(
+            o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
+
+        voxel_size = radius * 5
+        logger.debug("3-2. Downsample with a voxel size %.2f" % voxel_size)
+        source_down = source.voxel_down_sample(voxel_size)
+        target_down = target.voxel_down_sample(voxel_size)
+        # fps_num = 2000
+        # source_down = source.farthest_point_down_sample(fps_num)
+        # target_down = target.farthest_point_down_sample(fps_num)
+
+        logger.debug("3-3. Applying colored point cloud registration")
+        result_icp = o3d.pipelines.registration.registration_colored_icp(
+            source_down, target_down, voxel_size, current_transformation,
+            o3d.pipelines.registration.TransformationEstimationForColoredICP(),
+            o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-6,
+                                                              relative_rmse=1e-6,
+                                                              max_iteration=iter))
+
+        # result_icp = o3d.pipelines.registration.registration_icp(
+        #     source_down, target_down, voxel_size, current_transformation,
+        #     o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+        #     o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-6,
+        #                                                       relative_rmse=1e-6,
+        #                                                       max_iteration=iter))
+
+        source = source.transform(result_icp.transformation)
+        current_transformation = current_transformation @ result_icp.transformation
+        logger.debug("result_icp:", result_icp)
+        logger.debug("current_step_matrix:", result_icp.transformation)
+        logger.debug("accumulated_matrix:", current_transformation)
+        # logger.debug(result_icp.transformation)
+    # draw_registration_result_original_color(source, target, result_icp.transformation)
+    return current_transformation
+
+
+def colored_point_cloud_registration_fine(source, target, debug=False):
+    # o3d.visualization.draw_geometries([source, target])
+    radius = 0.01
+    iter = 10000
+    init_transformation = np.identity(4)
+    logger.debug("3. Colored point cloud registration")
+
+    logger.debug("3-1. Estimate normal.")
+    source.estimate_normals(
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=30))
+    target.estimate_normals(
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=30))
+
+    logger.debug("3-3. Applying colored point cloud registration")
+    if debug:
+        vis_pcds([source])
+        vis_pcds([target])
+        vis_pcds([source, target])
+    result_icp = o3d.pipelines.registration.registration_generalized_icp(
+        source, target, radius * 5, init_transformation,
+        o3d.pipelines.registration.TransformationEstimationForGeneralizedICP(),
+        o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-7,
+                                                          relative_rmse=1e-7,
+                                                          max_iteration=iter))
+
+    if debug:
+        vis_pcds([source.transform(result_icp.transformation), target])
+    logger.debug("result_icp:", result_icp)
+    logger.debug("current_step_matrix:", result_icp.transformation)
+    # logger.debug(result_icp.transformation)
+    # draw_registration_result_original_color(source, target, result_icp.transformation)
+    return result_icp.transformation
+
+
+def get_nws_points(point_cloud: o3d.geometry.PointCloud) -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], Optional[Exception]]:
+    vis1 = o3d.visualization.VisualizerWithEditing()
+    vis1.create_window('Please press Shift and click 3 Points: Base - North - West. Press Q to exit.')
+    logger.debug('Please press Shift and click 3 Points: Base - North - West. Press Q to exit.')
+    vis1.add_geometry(point_cloud)
+    vis1.update_renderer()
+    vis1.run()  # user picks points
+    vis1.destroy_window()
+
+    pts_sel = vis1.get_picked_points()
+    if len(pts_sel) != 3:
+        return (np.array([]), np.array([]), np.array([])), Exception("Please select 3 points")
+
+    pcd_points = np.asarray(point_cloud.points)
+    pts = pcd_points[pts_sel]
+    base, north, west = pts[0], pts[1], pts[2]
+
+    return (base, north, west), None
+
+
+def get_trans_mat_by_nws_combined(point_cloud: o3d.geometry.PointCloud) -> Tuple[np.ndarray, np.ndarray, Optional[Exception]]:
+    """
+    Get transformation matrix by north and west direction, with interaction
+
+    :param pc_helper:
+    :return:
+    """
+    (base, north, west), err = get_nws_points(point_cloud)
+    if err is not None:
+        return np.array([]), np.array([]), err
+    north_direction, west_direction = north - base, west - base
+    north_direction /= np.linalg.norm(north_direction)
+    west_direction /= np.linalg.norm(west_direction)
+
+    point_set_A = np.concatenate((
+        base[:, None],
+        (base + north_direction)[:, None],
+        (base + west_direction)[:, None],
+    ), axis=1)
+    point_set_B = np.array(
+        [[0, 0, 0],
+         [1, 0, 0],
+         [0, 1, 0]]
+    ).T
+    rot, trans = rigid_transform_3d(point_set_A, point_set_B)
+
+    return rot, trans, None
+
+
+def get_workspace_limit_by_interaction(point_cloud: o3d.geometry.PointCloud) -> Tuple[List[np.ndarray], Optional[Exception]]:
+    """
+    Get workspace limit by interaction
+
+    :param pc_helper:
+    :return:
+    """
+    (base, north, west), err = get_nws_points(point_cloud)
+    if err is not None:
+        return [np.array([])], Exception("Please select 3 points")
+
+    height_m = py_cli_interaction.must_parse_cli_float("Please input height (m): ")
+    north_direction, west_direction = north - base, west - base
+    up_direction = np.cross(north_direction, west_direction)
+    up_direction /= np.linalg.norm(up_direction)
+
+    sky = base + up_direction * height_m
+
+    return [base, north, west, sky], None
+
+
+def merge_point_cloud_helpers(raw_pc_by_camera: Iterable[PointCloudHelper]) -> Optional[o3d.geometry.PointCloud]:
+    merged_pc = None
+    for pc in raw_pc_by_camera:
+        if merged_pc is None:
+            merged_pc = pc.pcd
+        else:
+            merged_pc = merged_pc + pc.pcd
+    return merged_pc

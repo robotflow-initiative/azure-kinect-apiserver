@@ -101,6 +101,8 @@ def main(args):
         exit(1)
     APPLICATION = Application(cfg)
 
+    if args.multical_calibration is not None:
+        APPLICATION.load_mulitcal_calibration(args.multical_calibration)
     # Prepare system
     APPLICATION.logger.info(f"azure apiserver service listen at {cfg.api_port}")
     APPLICATION.logger.info(f"azure apiserver config {cfg}")
@@ -127,7 +129,8 @@ def main(args):
 
 def entry_point(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='./azure_kinect_config.yaml')
+    parser.add_argument('--config', type=str, default='./azure_kinect_config.yaml', help='path to azure kinect config file')
+    parser.add_argument('--multical_calibration', type=str, default=None, help='path to multical calibration file, can be its parent directory')
     args = parser.parse_args(argv)
     main(args)
 
