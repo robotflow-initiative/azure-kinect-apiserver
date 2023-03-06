@@ -152,7 +152,7 @@ def analyze_worker_s2(opt: KinectSystemCfg,
         else:
             for marker_id in curr_frame_result.keys():
                 if marker_id not in detection_result_np_collection.keys():
-                    detection_result_np_collection[marker_id] = np.empty((len(detection_result),), dtype=object)
+                    detection_result_np_collection[marker_id] = np.empty((len(dataset),), dtype=object)
                 else:
                     detection_result_np_collection[marker_id][frame_idx] = analyze_worker_s2_merge(
                         curr_frame_result[marker_id],
@@ -286,7 +286,7 @@ def analyze_worker_s3(opt: KinectSystemCfg,
                         frame_idx < start_index,
                         frame_idx >= stop_index
                     ]
-            ) and False:
+            ):
                 pbar.update(1)
                 continue
             else:
@@ -297,7 +297,7 @@ def analyze_worker_s3(opt: KinectSystemCfg,
                                              frame_path_pack,
                                              xlim, ylim, zlim)
 
-                tpool.submit(save_pcds, list(final_pc.values()), pcd_save_path, '%06d' % frame_idx, True)
+                [tpool.submit(save_pcds, [final_pc[cam_name]], pcd_save_path, '%06d_%s' % (frame_idx, cam_name)) for cam_name in final_pc.keys()]
                 # save_pcds(list(final_pc.values()), pcd_save_path, '%06d' % frame_idx)
                 pbar.update()
     tpool.shutdown(wait=True)
@@ -310,11 +310,16 @@ def analyze_worker_s3(opt: KinectSystemCfg,
 
 def main(args: argparse.Namespace):
     opt = KinectSystemCfg(args.config)
+    assert opt.valid is True, "config file is not valid"
+
+    if args.marker_type is None:
+        args.marker_type = opt.marker_type
+    if args.marker_length is None:
+        args.marker_length = opt.marker_length_m
+
     logger.info("processing directory: {}".format(osp.realpath(args.data_dir)))
-
     kinect_dir = osp.join(args.data_dir, "kinect")
-
-    valid_ids = args.valid_ids.split(",") if args.valid_ids is not None else None
+    valid_ids = args.valid_ids.split(",") if args.valid_ids is not None else opt.marker_valid_ids
     assert args.marker_type is not None, "please specify aruco type"
     assert args.marker_length is not None, "please specify marker length"
     aruco_type = getattr(cv2.aruco, args.marker_type)
@@ -366,17 +371,17 @@ def main(args: argparse.Namespace):
 
 def entry_point(argv):
     if len(argv) < 1:
-        print("Usage: python -m azure_kinect_apiserver analyze <path>")
+        print("Usage: python -m azure_kinect_apiserver analyze <path> --config=<config_path>")
         return 1
     else:
         data_dir = argv[0]
         parser = argparse.ArgumentParser()
-        parser.add_argument('--config', type=str, default='./azure_kinect_config.yaml')
-        parser.add_argument('--marker_length', type=float, required=True, help='marker length in meter')
+        parser.add_argument('--config', type=str, required=True, default=None)
+        parser.add_argument('--marker_length', type=float, default=None, help='marker length in meter')
         parser.add_argument(
             '--marker_type',
             type=str,
-            required=True,
+            default=None,
             choices=[
                 'DICT_4X4_100',
                 'DICT_4X4_1000',

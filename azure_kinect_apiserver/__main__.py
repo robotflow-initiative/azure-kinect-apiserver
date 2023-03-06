@@ -16,5 +16,7 @@ elif args[0] == "decode":
     exit(cmd.decode(args[1:]))
 elif args[0] == "multical":
     exit(cmd.multical(args[1:]))
+elif args[0] == "analyze":
+    exit(cmd.analyze(args[1:]))
 else:
     print("Unknown command: {}".format(args[0]))

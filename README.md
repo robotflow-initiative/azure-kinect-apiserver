@@ -83,6 +83,18 @@ Set-Item Env:PATH "$Env:PATH;/path/to/azure-kinect-sdk/"
         └─depth
     ```
   
+## Generate client
+
+First launch the apiserver, then run openapi-python-client:
+
+```shell
+openapi-python-client generate --url http://127.0.0.1:8080/openapi.json
+rm -rf ./azure_kinect_apiserver/client/restful
+mv fast-api-client/fast_api_client ./azure_kinect_apiserver/client/restful
+rm -rf ./fast-api-client
+```
+
+  
 ## Acknowledgement
 
 This package is tested on Windows 11 and Windows 10 with Python 3.9. It is not tested on Linux or Mac OS.

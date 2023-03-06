@@ -60,7 +60,7 @@ def interaction_loop(app: Application):
         elif k == ord('c') or k == ord(' '):
             continue
 
-    with open(osp.join(app.option.data_path, tag, "calibration.json")) as f:
+    with open(osp.join(app.option.data_path, tag, "calibration.json"), "w") as f:
         f.write('{}')
 
 

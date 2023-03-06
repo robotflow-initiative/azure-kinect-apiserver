@@ -351,7 +351,8 @@ def main(multical_path: str):
             limits_nws, err = get_workspace_limit_by_interaction(merged_pc)
 
             if err is None:
-                logger.info("workspace limits:", limits_nws)
+                logger.info("workspace limits:")
+                logger.info(limits_nws)
                 patch_workspace_limits(multical_path, limits_nws)
                 break
             else:
