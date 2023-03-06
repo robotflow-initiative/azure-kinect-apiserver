@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os
 import os.path as osp
@@ -7,7 +8,6 @@ import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple, Dict, List
-import json
 
 import cv2
 import numpy as np

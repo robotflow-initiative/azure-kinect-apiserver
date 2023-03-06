@@ -30,7 +30,7 @@ def get_mkv_record_meta(path: str) -> Tuple[Dict[str, Any], Optional[Exception]]
     else:
         pb_resolution = None
 
-    return {'config': pb_config.to_dict(), 'length': pb_length, 'resolution': pb_resolution, 'is_master':  pb_config.to_dict()['sync_mode'] == 1}, None
+    return {'config': pb_config.to_dict(), 'length': pb_length, 'resolution': pb_resolution, 'is_master': pb_config.to_dict()['sync_mode'] == 1}, None
 
 
 def get_mkv_record_calibration(path: str) -> Tuple[Dict[str, Any], Optional[Exception]]:

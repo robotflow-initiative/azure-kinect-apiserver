@@ -1,18 +1,18 @@
 import argparse
 import base64
 import logging
+import os
 import os.path as osp
 import pickle
+import threading
 import time
 from typing import Optional
-import threading
-import os
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from azure_kinect_apiserver.apiserver.app import Application
 from azure_kinect_apiserver.common import KinectSystemCfg

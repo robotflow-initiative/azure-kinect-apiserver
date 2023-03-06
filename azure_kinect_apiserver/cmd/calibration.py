@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import logging
-import os
 from os import path as osp
 
 import cv2

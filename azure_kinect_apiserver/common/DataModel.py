@@ -1,13 +1,11 @@
-import os.path as osp
-import json
-import logging
-import numpy as np
-import sys
-import os
-from typing import Tuple, List, Dict, Union, Any, Optional
 import dataclasses
+import json
+import os
+import os.path as osp
+from typing import List, Dict, Any, Optional
+
+import numpy as np
 import pandas as pd
-import cv2
 
 from azure_kinect_apiserver.common import MulticalCameraInfo
 

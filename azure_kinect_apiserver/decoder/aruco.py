@@ -1,13 +1,12 @@
 import copy
 import dataclasses
+import logging
 from typing import Union, List, Optional, Dict, Tuple
 
 import cv2
 import cv2.aruco as aruco
 import numpy as np
 import open3d as o3d
-
-import logging
 
 logger = logging.getLogger("azure_kinect_apiserver.decoder.aruco")
 
@@ -97,7 +96,7 @@ class ArucoDetectHelper:
         depth_frame_masked = cls.apply_polygon_mask_depth(depth_frame, [corner.reshape(-1, 2).astype(np.int32) for corner in corners])
 
         if depth_frame_masked.sum() > 0:
-            color_frame_o3d = o3d.geometry.Image(color_frame_masked.astype(np.uint8))
+            color_frame_o3d = o3d.geometry.Image(cv2.cvtColor(color_frame_masked.astype(np.uint8), cv2.COLOR_BGRA2RGB))
             depth_frame_o3d = o3d.geometry.Image(depth_frame_masked.astype(np.uint16))
             rgbd_image = o3d.geometry.RGBDImage().create_from_color_and_depth(
                 color_frame_o3d,

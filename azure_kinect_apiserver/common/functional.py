@@ -1,18 +1,17 @@
 import logging
 import os
 import subprocess
+from typing import Tuple, Optional, List, Iterable
 
 import cv2
 import numpy as np
 import open3d as o3d
-
-from typing import Tuple, Optional, List, Iterable
+import py_cli_interaction
 
 from .point import PointCloudHelper
 
-import py_cli_interaction
-
 logger = logging.getLogger('azure_kinect_apiserver.common.functional')
+
 
 def clip_depth_image(depth_image: np.ndarray, min_depth: int = 0, max_depth: int = 10000) -> np.ndarray:
     """Converts a depth image to a color image.
@@ -69,7 +68,7 @@ __FAKE_COLORS__ = [
 
 
 def vis_pcds(transformed_pcd_list, fake_color=False):
-    coordinate = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+    coordinate = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.1, origin=[0, 0, 0])
     transformed_pcd_all = o3d.geometry.PointCloud()
     xyz_list = [np.asarray(pcd.points) for pcd in transformed_pcd_list]
     if fake_color:
@@ -81,17 +80,21 @@ def vis_pcds(transformed_pcd_list, fake_color=False):
     o3d.visualization.draw_geometries([coordinate, transformed_pcd_all])
 
 
-def save_pcds(transformed_pcd_list, save_path, seperate=True, fake_color=False, transform_mat=np.eye(4)):
+def save_pcds(transformed_pcd_list: List[o3d.geometry.PointCloud],
+              save_path: str,
+              tag: str,
+              seperate=False,
+              fake_color=False):
     """
     If you do not want hand-eye calibration, you can simply comment out the following lines.
     transform_mat[:3, :3] = R.from_quat((0.0710936350871877, 0.12186999407, -0.583974393827845, 0.799416854295149)).as_matrix()  # x, y, z, w
     transform_mat[:3, 3] = np.array((0.17857327, 0.5218457133, 0.28518456))  # x,y,z
 
+    :param tag:
     :param transformed_pcd_list:
     :param save_path:
     :param seperate:
     :param fake_color:
-    :param transform_mat:
     :return:
 
     TODO: Optimize
@@ -102,61 +105,28 @@ def save_pcds(transformed_pcd_list, save_path, seperate=True, fake_color=False, 
     else:
         rgb_list = [np.asarray(pcd.colors) for pcd in transformed_pcd_list]
 
-    if seperate:
-        for i in range(len(xyz_list)):
-            xyzs = xyz_list[i]
-            rgbs = rgb_list[i]
+    if not seperate:
+        xyz_list = [np.concatenate(xyz_list, axis=0)]
+        rgb_list = [np.concatenate(rgb_list, axis=0)]
 
-            transformed_pcd_all = o3d.geometry.PointCloud()
-            transformed_pcd_all.points = o3d.utility.Vector3dVector(xyzs)
-            transformed_pcd_all.colors = o3d.utility.Vector3dVector(rgbs)
-
-            transformed_pcd_all.points = o3d.utility.Vector3dVector(np.asarray(transformed_pcd_all.points)[:, (2, 0, 1)])
-            transformed_pcd_all.points = o3d.utility.Vector3dVector(np.asarray(transformed_pcd_all.points) * np.array((1, -1, -1)))
-            transformed_pcd_all.transform(transform_mat)
-
-            # vis_pcds([transformed_pcd_all])
-
-            xyz = np.asarray(transformed_pcd_all.points)
-            rgb = np.asarray(transformed_pcd_all.colors)
-
-            # NOTICE: The following lines are to purge the points that is outside the workspace
-            # Comment out them if they are unwanted!
-            # mask = (xyz[:, 0] > 0.35) & (xyz[:, 0] < 0.95) & (xyz[:, 1] > -0.5) & (xyz[:, 1] < 0.5) & (xyz[:, 2] > 0.03) & (xyz[:, 2] < 0.4)
-            # xyz = xyz[mask]
-            # rgb = rgb[mask]
-
-            masked_pcd = o3d.geometry.PointCloud()
-            masked_pcd.points = o3d.utility.Vector3dVector(xyz)
-            masked_pcd.colors = o3d.utility.Vector3dVector(rgb)
-            o3d.io.write_point_cloud(os.path.join('./output', f'{save_path}_{i}.ply'), masked_pcd)
-    else:
-        xyzs = np.concatenate(xyz_list, axis=0)
-        rgbs = np.concatenate(rgb_list, axis=0)
+    for i in range(len(xyz_list)):
+        xyzs = xyz_list[i]
+        rgbs = rgb_list[i]
 
         transformed_pcd_all = o3d.geometry.PointCloud()
         transformed_pcd_all.points = o3d.utility.Vector3dVector(xyzs)
         transformed_pcd_all.colors = o3d.utility.Vector3dVector(rgbs)
 
-        transformed_pcd_all.points = o3d.utility.Vector3dVector(np.asarray(transformed_pcd_all.points)[:, (2, 0, 1)])
-        transformed_pcd_all.points = o3d.utility.Vector3dVector(np.asarray(transformed_pcd_all.points) * np.array((1, -1, -1)))
-        transformed_pcd_all.transform(transform_mat)
-
-        # vis_pcds([transformed_pcd_all])
-
         xyz = np.asarray(transformed_pcd_all.points)
         rgb = np.asarray(transformed_pcd_all.colors)
-
-        # NOTICE: The following lines are to purge the points that is outside the workspace
-        # Comment out them if they are unwanted!
-        # mask = (xyz[:, 0] > 0.35) & (xyz[:, 0] < 0.95) & (xyz[:, 1] > -0.5) & (xyz[:, 1] < 0.5) & (xyz[:, 2] > 0.03) & (xyz[:, 2] < 0.4)
-        # xyz = xyz[mask]
-        # rgb = rgb[mask]
 
         masked_pcd = o3d.geometry.PointCloud()
         masked_pcd.points = o3d.utility.Vector3dVector(xyz)
         masked_pcd.colors = o3d.utility.Vector3dVector(rgb)
-        o3d.io.write_point_cloud(os.path.join('./output', f'{save_path}.ply'), masked_pcd)
+        if seperate:
+            o3d.io.write_point_cloud(os.path.join(save_path, f'{tag}_{i}.ply'), masked_pcd)
+        else:
+            o3d.io.write_point_cloud(os.path.join(save_path, f'{tag}.ply'), masked_pcd)
 
 
 # noinspection PyPep8Naming
@@ -226,6 +196,7 @@ def rigid_transform_3d(A, B):
     return R, t
 
 
+# Credit: Xuehan
 def colored_point_cloud_registration_robust(source, target):
     # o3d.visualization.draw_geometries([source, target])
     voxel_radius = [0.04, 0.02, 0.01]
@@ -296,6 +267,40 @@ def colored_point_cloud_registration_fine(source, target, debug=False):
     result_icp = o3d.pipelines.registration.registration_generalized_icp(
         source, target, radius * 5, init_transformation,
         o3d.pipelines.registration.TransformationEstimationForGeneralizedICP(),
+        o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-7,
+                                                          relative_rmse=1e-7,
+                                                          max_iteration=iter))
+
+    if debug:
+        vis_pcds([source.transform(result_icp.transformation), target])
+    logger.debug("result_icp:", result_icp)
+    logger.debug("current_step_matrix:", result_icp.transformation)
+    # logger.debug(result_icp.transformation)
+    # draw_registration_result_original_color(source, target, result_icp.transformation)
+    return result_icp.transformation
+
+
+def colored_point_cloud_registration_fine_color(source, target, debug=False):
+    # o3d.visualization.draw_geometries([source, target])
+    radius = 0.01
+    iter = 10000
+    init_transformation = np.identity(4)
+    logger.debug("3. Colored point cloud registration")
+
+    logger.debug("3-1. Estimate normal.")
+    source.estimate_normals(
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=30))
+    target.estimate_normals(
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=30))
+
+    logger.debug("3-3. Applying colored point cloud registration")
+    if debug:
+        vis_pcds([source])
+        vis_pcds([target])
+        vis_pcds([source, target])
+    result_icp = o3d.pipelines.registration.registration_colored_icp(
+        source, target, radius * 5, init_transformation,
+        o3d.pipelines.registration.TransformationEstimationForColoredICP(),
         o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-7,
                                                           relative_rmse=1e-7,
                                                           max_iteration=iter))

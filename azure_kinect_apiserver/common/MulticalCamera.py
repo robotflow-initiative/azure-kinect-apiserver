@@ -1,8 +1,9 @@
 import json
 import logging
-from typing import Tuple
-import numpy as np
 import os.path as osp
+from typing import Tuple
+
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("azure_kinect_apiserver.common.MultiCamera")
@@ -117,12 +118,19 @@ class MulticalCameraInfo:
             self._cached_realworld_transmat = res
             return res
 
-    def get_workspace_limits(self):
-        return {
-            "x_lim": np.array(self.camera_info['workspace_limits']["x_lim"]),
-            "y_lim": np.array(self.camera_info['workspace_limits']["y_lim"]),
-            "z_lim": np.array(self.camera_info['workspace_limits']["z_lim"]),
-        } if 'workspace_limits' in self.camera_info else None
+    def get_workspace_limits(self, output_type=dict):
+        if output_type == dict:
+            return {
+                "x_lim": np.array(self.camera_info['workspace_limits']["x_lim"]),
+                "y_lim": np.array(self.camera_info['workspace_limits']["y_lim"]),
+                "z_lim": np.array(self.camera_info['workspace_limits']["z_lim"]),
+            } if 'workspace_limits' in self.camera_info else None
+        elif output_type == tuple:
+            return (np.array(self.camera_info['workspace_limits']["x_lim"]),
+                    np.array(self.camera_info['workspace_limits']["y_lim"]),
+                    np.array(self.camera_info['workspace_limits']["z_lim"]))
+        else:
+            raise NotImplementedError
 
     def save_to_json(self, path):
         with open(path, 'w') as f:

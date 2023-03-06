@@ -14,13 +14,12 @@ import shutil
 import subprocess
 from typing import Optional, Dict, Tuple, List, Iterable
 
-import numpy as np
-import yaml
-
 import cv2
-import py_cli_interaction
+import numpy as np
 import open3d as o3d
 import plyer
+import py_cli_interaction
+import yaml
 
 from azure_kinect_apiserver.common import (
     MulticalCameraInfo,
@@ -31,7 +30,6 @@ from azure_kinect_apiserver.common import (
     merge_point_cloud_helpers,
     get_trans_mat_by_nws_combined,
 )
-
 from azure_kinect_apiserver.decoder import ArucoDetectHelper
 
 logger = logging.getLogger("azure_kinect_apiserver.cmd.multical")

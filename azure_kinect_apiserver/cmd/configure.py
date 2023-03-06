@@ -1,4 +1,5 @@
 import argparse
+
 from azure_kinect_apiserver.common import KinectSystemCfg
 
 

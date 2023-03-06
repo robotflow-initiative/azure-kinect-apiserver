@@ -11,9 +11,9 @@ from typing import Dict, Optional, List, Tuple
 
 import cv2
 import numpy as np
-import pandas as pd  # TODO: remove pandas dependency
-import tqdm
+import pandas as pd
 import plyer
+import tqdm
 
 from azure_kinect_apiserver.decoder import (
     mkv_record_wrapper,
