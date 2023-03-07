@@ -7,6 +7,7 @@ import tqdm
 
 from azure_kinect_apiserver.common.MulticalCamera import MulticalCameraInfo
 from azure_kinect_apiserver.decoder.aruco import ArucoDetectHelper
+from azure_kinect_apiserver.common import remove_green_background
 
 
 # INIT_DIST = np.array(([[0, 0, 0, 0, 0.1]]))
@@ -80,10 +81,15 @@ def main(tagged_path: str):
             for idx, (color_path, depth_path) in enumerate(zip(color_img_path_list, depth_img_path_list)):
                 color_frame = cv2.imread(color_path)
                 depth_frame = cv2.imread(depth_path, cv2.IMREAD_ANYDEPTH)
+                color_frame, mask = remove_green_background(color_frame)
+                depth_frame = cv2.bitwise_and(depth_frame, depth_frame, mask=mask)
                 res, processed_color_frame, processed_depth_frame, err = ctx.process_one_frame(color_frame[:, :, :3], depth_frame, debug=True)
                 if err is None:
+                    cv2.imshow('color', processed_color_frame)
+                    cv2.waitKey(0)
                     ctx.vis_2d(res, processed_color_frame)
                     ctx.vis_3d(res, processed_color_frame, processed_depth_frame)
+
                 pbar.update()
 
 

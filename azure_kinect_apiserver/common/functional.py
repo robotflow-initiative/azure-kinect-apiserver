@@ -391,3 +391,18 @@ def merge_point_cloud_helpers(raw_pc_by_camera: Iterable[PointCloudHelper]) -> O
         else:
             merged_pc = merged_pc + pc.pcd
     return merged_pc
+
+
+def remove_green_background(img: np.ndarray):
+    img_blur = cv2.GaussianBlur(img, (3, 3), 0)
+    hsv = cv2.cvtColor(img_blur, cv2.COLOR_BGR2HSV)
+    lower_green = np.array([35, 43, 46])
+    upper_green = np.array([77, 255, 255])
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  # 矩形结构
+    mask_open = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
+    cv2.erode(mask_open, kernel, mask_open, iterations=1)
+    cv2.GaussianBlur(mask_open, (3, 3), 0, mask_open)
+    mask_open = cv2.bitwise_not(mask_open)
+    res = cv2.bitwise_and(img_blur, img_blur, mask=mask_open)
+    return res, mask_open

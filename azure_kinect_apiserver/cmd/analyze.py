@@ -17,7 +17,8 @@ from azure_kinect_apiserver.common import (
     MulticalCameraInfo,
     PointCloudHelper,
     save_pcds,
-    vis_pcds
+    vis_pcds,
+    remove_green_background
 )
 from azure_kinect_apiserver.decoder import (
     ArucoDetectHelper
@@ -26,6 +27,7 @@ from azure_kinect_apiserver.decoder import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("azure_kinect_apiserver.cmd.analyze")
 DEBUG = False
+
 
 def analyze_worker_s1(opt: KinectSystemCfg, dataset: AzureKinectDataset, marker_length: float, marker_type: int) -> Tuple[
     Optional[List[Tuple[int, Dict[str, Tuple[np.ndarray, np.ndarray, bool]]]]], Optional[Exception]]:
@@ -105,7 +107,8 @@ def analyze_worker_s2_merge(marker_detection: Dict[str, Dict[str, Tuple[np.ndarr
     else:
         candidates = []
         for cam_name in marker_detection.keys():
-            trans_mat = dataset.multical_calibration.get_realworld_transmat() @ dataset.multical_calibration.get_icp_extrinsic_refinement(cam_name) @ dataset.multical_calibration.get_extrinsic(cam_name)
+            trans_mat = dataset.multical_calibration.get_realworld_transmat() @ dataset.multical_calibration.get_icp_extrinsic_refinement(cam_name) @ dataset.multical_calibration.get_extrinsic(
+                cam_name)
             rvec, tvec, status = marker_detection[cam_name]
             if status and cam_name == dataset.master_camera_name:
                 candidates = [translate_aruco_6dof_to_realworld(trans_mat, rvec, tvec)]
@@ -184,11 +187,13 @@ def merge_multicam_pc(
         # undistort
         color_undistort = cv2.undistort(color_img, cam_matrix, cam_dist)
         depth_undistort = cv2.undistort(depth_img, cam_matrix, cam_dist)
+        color_undistort_masked, mask = remove_green_background(color_undistort)
+        depth_undistort_masked = cv2.bitwise_and(depth_undistort, depth_undistort, mask=mask)
 
         # build point cloud
         raw_pc = PointCloudHelper(
-            color_undistort,
-            depth_undistort,
+            color_undistort_masked,
+            depth_undistort_masked,
             camera_intrinsic_desc=(
                 cam_info.get_resolution(cam_name)[0],
                 cam_info.get_resolution(cam_name)[1],
@@ -211,6 +216,12 @@ def merge_multicam_pc(
         # crop by limits
         cropped_pc = PointCloudHelper.crop_by_hsv_limits_reverse(cropped_pc, [35, 77], [43, 255], [46, 255])
         cropped_pc = PointCloudHelper.crop_by_xyz_limits(cropped_pc, xlim, ylim, zlim)
+
+        # remove outliers
+        # _, ind = cropped_pc.remove_radius_outlier(nb_points=50, radius=0.05)
+        # cropped_pc = cropped_pc.select_by_index(ind)
+        _, ind = cropped_pc.remove_statistical_outlier(nb_neighbors=50, std_ratio=2)
+        cropped_pc = cropped_pc.select_by_index(ind)
 
         final_pc[cam_name] = cropped_pc
     return final_pc

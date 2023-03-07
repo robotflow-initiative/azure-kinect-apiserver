@@ -9,6 +9,7 @@ print(dataset.start_idx)
 print(dataset[0])
 for i in range(dataset.start_idx, len(dataset)):
     point_cloud, marker_detection, force_data, point_cloud_status, marker_status, force_status, ts = dataset[i]
+    frame_meta_pack, frame_path_pack = dataset.kinect_dataset[i]
     if point_cloud_status and marker_status:  # and force_status:
 
         base_coordinate = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.3, origin=[0, 0, 0])  # to plot the base coordinate

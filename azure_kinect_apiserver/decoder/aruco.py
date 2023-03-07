@@ -257,6 +257,7 @@ class ArucoDetectHelper:
             )
             marker_meshes.append(pcd)
         o3d.visualization.draw_geometries(marker_meshes)
+        return marker_meshes
 
     def vis_2d(self, detection: Dict[str, Tuple[np.ndarray, np.ndarray]], color_frame):
         for marker_id, (rvec, tvec, is_unique) in detection.items():
@@ -268,7 +269,4 @@ class ArucoDetectHelper:
         scale = int(color_frame.shape[0] / 480)
         cv2.imshow("frame", color_frame[::scale, ::scale, :])
         key = cv2.waitKey(0)
-        if key == 27:  # 按esc键退出
-            print('esc break...')
-            cv2.destroyAllWindows()
-            return
+        return color_frame
