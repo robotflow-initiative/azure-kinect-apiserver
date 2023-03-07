@@ -17,6 +17,7 @@ from azure_kinect_apiserver.common import (
     MulticalCameraInfo,
     PointCloudHelper,
     save_pcds,
+    vis_pcds
 )
 from azure_kinect_apiserver.decoder import (
     ArucoDetectHelper
@@ -24,7 +25,7 @@ from azure_kinect_apiserver.decoder import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("azure_kinect_apiserver.cmd.analyze")
-
+DEBUG = False
 
 def analyze_worker_s1(opt: KinectSystemCfg, dataset: AzureKinectDataset, marker_length: float, marker_type: int) -> Tuple[
     Optional[List[Tuple[int, Dict[str, Tuple[np.ndarray, np.ndarray, bool]]]]], Optional[Exception]]:
@@ -59,7 +60,7 @@ def analyze_worker_s1(opt: KinectSystemCfg, dataset: AzureKinectDataset, marker_
             res, processed_color_frame, processed_depth_frame, err = aruco_ctx[cam_name].process_one_frame(color_frame, depth_frame, undistort=True, debug=opt.debug)
             if err is None:
                 curr_aruco_result[cam_name] = res
-                if opt.debug:
+                if opt.debug or DEBUG:
                     aruco_ctx[cam_name].vis_2d(res, processed_color_frame)
                     aruco_ctx[cam_name].vis_3d(res, processed_color_frame, processed_depth_frame)
         return frame_idx, curr_aruco_result
@@ -104,7 +105,7 @@ def analyze_worker_s2_merge(marker_detection: Dict[str, Dict[str, Tuple[np.ndarr
     else:
         candidates = []
         for cam_name in marker_detection.keys():
-            trans_mat = dataset.multical_calibration.get_realworld_transmat() @ dataset.multical_calibration.get_extrinsic(cam_name)
+            trans_mat = dataset.multical_calibration.get_realworld_transmat() @ dataset.multical_calibration.get_icp_extrinsic_refinement(cam_name) @ dataset.multical_calibration.get_extrinsic(cam_name)
             rvec, tvec, status = marker_detection[cam_name]
             if status and cam_name == dataset.master_camera_name:
                 candidates = [translate_aruco_6dof_to_realworld(trans_mat, rvec, tvec)]
@@ -169,6 +170,7 @@ def merge_multicam_pc(
         cam_info: MulticalCameraInfo,
         enable_finetune: bool,
         finetune_transform: Dict[str, np.ndarray],
+        enable_denoise: bool,
         frame_path_pack: Dict[str, Tuple[str, str]],
         xlim: Tuple[float, float],
         ylim: Tuple[float, float],
@@ -190,11 +192,11 @@ def merge_multicam_pc(
             camera_intrinsic_desc=(
                 cam_info.get_resolution(cam_name)[0],
                 cam_info.get_resolution(cam_name)[1],
-                cam_info.get_intrinsic(cam_name)
+                cam_matrix
             ),
             transform=cam_info.get_extrinsic(cam_name),
             enable_norm_filter=False,
-            enable_denoise=True,
+            enable_denoise=enable_denoise,
             denoise_radius=0.02,
             denoise_std_ratio=0.05
         )
@@ -204,11 +206,11 @@ def merge_multicam_pc(
             cropped_pc.transform(finetune_transform[cam_name])
 
         # convert to realworld
-        raw_pc.pcd.transform(cam_info.get_realworld_transmat())
+        cropped_pc.transform(cam_info.get_realworld_transmat())
 
         # crop by limits
-        cropped_pc = PointCloudHelper.crop_by_xyz_limits(raw_pc.pcd, xlim, ylim, zlim)
         cropped_pc = PointCloudHelper.crop_by_hsv_limits_reverse(cropped_pc, [35, 77], [43, 255], [46, 255])
+        cropped_pc = PointCloudHelper.crop_by_xyz_limits(cropped_pc, xlim, ylim, zlim)
 
         final_pc[cam_name] = cropped_pc
     return final_pc
@@ -219,6 +221,7 @@ def analyze_worker_s3(opt: KinectSystemCfg,
                       detection_result: Dict[str, np.ndarray],
                       margin: int = 10,
                       enable_finetune: bool = True,
+                      enable_denoise: bool = True,
                       quiet: bool = False):
     num_frames = len(dataset)
     assert num_frames > 0, f"num_frames={num_frames}"
@@ -227,10 +230,9 @@ def analyze_worker_s3(opt: KinectSystemCfg,
     timestamp_offset = dataset.get_system_timestamp_offset()
     cam_info = dataset.multical_calibration
     xlim, ylim, zlim = cam_info.get_workspace_limits(output_type=tuple)
-    zlim[0] += 0.005  # raise the lower bound a little bit to avoid the floor
+    # zlim[0] += 0.01  # raise the lower bound a little bit to avoid the floor
 
     # init variables
-    finetune_transform = {}
     detection_map = functools.reduce(np.logical_or, [np.vectorize(lambda x: x is not None)(detection_result[marker_id]) for marker_id in detection_result.keys()])
     start_index = max(0, np.where(detection_map == True)[0].min() - margin)
     stop_index = min(len(detection_map), np.where(detection_map == True)[0].max() + margin)
@@ -238,41 +240,6 @@ def analyze_worker_s3(opt: KinectSystemCfg,
     pcd_save_path = osp.join(dataset.kinect_path, "pcd_s3")
     if not osp.exists(pcd_save_path):
         os.makedirs(pcd_save_path)
-
-    # if enable_finetune:
-    #     logger.info("finetune enabled")
-    #     for frame_idx in range(num_frames):
-    #         frame_meta_pack, frame_path_pack = dataset[frame_idx]
-    #         final_pc = merge_multicam_pc(cam_info, enable_finetune, finetune_transform, frame_path_pack, xlim, ylim, zlim)
-    #         for cam_name in final_pc.keys():
-    #             _, ind = final_pc[cam_name].remove_radius_outlier(nb_points=16, radius=0.02)
-    #             final_pc[cam_name] = final_pc[cam_name].select_by_index(ind)
-    #             _, ind = final_pc[cam_name].remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
-    #             final_pc[cam_name] = final_pc[cam_name].select_by_index(ind)
-    #
-    #         for cam_name in filter(lambda x: x != dataset.master_camera_name, final_pc.keys()):
-    #             finetune_transform[cam_name] = colored_point_cloud_registration_fine(final_pc[cam_name], final_pc[dataset.master_camera_name])
-    #             final_pc[cam_name].transform(finetune_transform[cam_name])
-    #         finetune_transform[dataset.master_camera_name] = np.eye(4)
-    #         logger.info("finetune transform:")
-    #         logger.info(finetune_transform)
-    #
-    #         if not quiet:
-    #             vis_pcds(final_pc.values(), fake_color=True)
-    #             vis_pcds(final_pc.values())
-    #             select_finetune = py_cli_interaction.must_parse_cli_bool("proceed with this finetune?", default_value=True)
-    #             if select_finetune:
-    #                 break
-    #             else:
-    #                 abort = py_cli_interaction.must_parse_cli_bool("abort?", default_value=False)
-    #                 if abort:
-    #                     enable_finetune = False
-    #                     break
-    #         else:
-    #             break
-    # if not ((enable_finetune and len(finetune_transform) > 0) or ((not enable_finetune) and len(finetune_transform) == 0)):
-    #     logger.error("finetune_transform is not empty but finetune is disabled")
-    #     return Exception("finetune_transform is not empty but finetune is disabled")
 
     finetune_transform = {cam_name: cam_info.get_icp_extrinsic_refinement(cam_name) for cam_name in dataset.camera_name_list}
 
@@ -294,8 +261,13 @@ def analyze_worker_s3(opt: KinectSystemCfg,
                 final_pc = merge_multicam_pc(cam_info,
                                              enable_finetune,
                                              finetune_transform,
+                                             enable_denoise,
                                              frame_path_pack,
                                              xlim, ylim, zlim)
+
+                if opt.debug or DEBUG:
+                    vis_pcds(final_pc.values(), fake_color=True)
+                    vis_pcds(final_pc.values())
 
                 [tpool.submit(save_pcds, [final_pc[cam_name]], pcd_save_path, '%06d_%s' % (frame_idx, cam_name)) for cam_name in final_pc.keys()]
                 # save_pcds(list(final_pc.values()), pcd_save_path, '%06d' % frame_idx)
@@ -365,7 +337,12 @@ def main(args: argparse.Namespace):
 
     # Stage 3
     logger.info("===== Stage 3 =====")
-    analyze_worker_s3(opt, dataset, detection_result_s2, enable_finetune=args.enable_finetune, quiet=args.quiet)
+    analyze_worker_s3(opt,
+                      dataset,
+                      detection_result_s2,
+                      enable_finetune=args.enable_finetune,
+                      enable_denoise=not args.disable_denoise,
+                      quiet=args.quiet)
     return 0
 
 
@@ -405,6 +382,7 @@ def entry_point(argv):
         parser.add_argument('--valid_ids', type=str, default=None, help='valid marker ids')
         parser.add_argument('--quiet', action='store_true', help='disable interactive mode')
         parser.add_argument('--enable_finetune', action='store_true', help='enable finetune')
+        parser.add_argument('--disable_denoise', action='store_true', help='enable denoise')
 
         args = parser.parse_args(argv[1:])
         args.data_dir = data_dir

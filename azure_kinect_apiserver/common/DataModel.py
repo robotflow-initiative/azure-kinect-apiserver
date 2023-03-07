@@ -160,23 +160,34 @@ class AzureKinectDataset:
 class ArizonForceDataset:
     # FIXME: move this class to another repository
     path: str
+    status: bool = False
     timestamp_offset: float = 0.0
     recordings: dict = dataclasses.field(default_factory=dict)
     interpolated_force: Optional[list] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
         recording_csv_paths = glob.glob(osp.join(self.path, '*.csv'))
-        device_names = list(map(lambda x: osp.splitext(osp.basename(x))[0], recording_csv_paths))
-        self.recordings = {
-            device_name: pd.read_csv(osp.join(self.path, device_name + '.csv')) for device_name in device_names
-        }
-        self.interpolated_force = None
+        if len(recording_csv_paths) == 0:
+            self.status = False
+            self.recordings = {}
+            self.interpolated_force = None
+        else:
+            self.status = True
+
+            device_names = list(map(lambda x: osp.splitext(osp.basename(x))[0], recording_csv_paths))
+            self.recordings = {
+                device_name: pd.read_csv(osp.join(self.path, device_name + '.csv')) for device_name in device_names
+            }
+            self.interpolated_force = None
 
     def __len__(self):
-        if self.interpolated_force is not None:
-            return len(self.interpolated_force[self.device_names[0]])
+        if not self.status:
+            return 0
         else:
-            return len(self.recordings[self.device_names[0]])
+            if self.interpolated_force is not None:
+                return len(self.interpolated_force[self.device_names[0]])
+            else:
+                return len(self.recordings[self.device_names[0]])
 
     def __getitem__(self, item):
         if self.interpolated_force is not None:
@@ -206,7 +217,11 @@ class JointPointCloudDataset:
         self.arizon_dataset = ArizonForceDataset(osp.join(self.path, 'arizon'))
         self.kinect_dataset.load()
         self.arizon_dataset.compute_interpolated_force(self.kinect_dataset.kinect_timestamps_unix + self.time_origin_arizon_minus_kinect_in_sec)
-        assert len(self.kinect_dataset) == len(self.arizon_dataset) == len(self.kinect_dataset.kinect_timestamps_unix)
+
+        if not self.arizon_dataset.status:
+            self.arizon_dataset = None
+        else:
+            assert len(self.kinect_dataset) == len(self.arizon_dataset) == len(self.kinect_dataset.kinect_timestamps_unix)
         self._length = len(self.kinect_dataset)
         self.timestamps = self.kinect_dataset.kinect_timestamps_unix
 
@@ -217,7 +232,7 @@ class JointPointCloudDataset:
         point_cloud_paths = self.kinect_dataset.point_cloud_path_collection[idx]
         marker_detections = {k: v[idx]
                              for k, v in self.kinect_dataset.marker_detections.items()}
-        force = self.arizon_dataset[idx]
+        force = self.arizon_dataset[idx] if self.arizon_dataset is not None else {None: None}
         if len(point_cloud_paths) == 0:
             point_cloud_collection = {}
         else:

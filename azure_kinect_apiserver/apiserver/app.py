@@ -190,6 +190,8 @@ class Application:
             else:
                 device_info_list = self.device_list_info_cache
 
+            device_info_list = list(filter(lambda x: x['Serial'] in [x.sn for x in self.option.camera_options], device_info_list))
+
             # Modify camera configuration
             self.device_list: List[pykinect.Device] = [pykinect.start_device(device_index=i, config=self.__get_device_config__(i)) for i, _ in
                                                        enumerate(device_info_list)]

@@ -134,13 +134,20 @@ def mkv_worker(kinect_dir: str):
     metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
     master_camera = list(filter(lambda x: x[1]['is_master'] is True, metadata['recordings'].items()))[0][0]
     ts, ts_action_start, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=master_camera, debug=False)
+    ret: Optional[Exception] = None
     if err is not None:
-        raise err
-    metadata['system_timestamp_offset'] = ts
-    metadata['system_action_start_timestamp'] = ts_action_start
+        logging.error(str(err))
+        ret = Exception("failed to get timestamp offset")
+        metadata['system_timestamp_offset'] = 0
+        metadata['system_action_start_timestamp'] = 0
+    else:
+        metadata['system_timestamp_offset'] = ts
+        metadata['system_action_start_timestamp'] = ts_action_start
 
     with open(osp.join(kinect_dir, "meta.json"), "w") as f:
         json.dump(metadata, f, indent=4, sort_keys=True)
+
+    return ret
 
 
 def main(args: argparse.Namespace):

@@ -197,7 +197,7 @@ def rigid_transform_3d(A, B):
 
 
 # Credit: Xuehan
-def colored_point_cloud_registration_robust(source, target):
+def colored_point_cloud_registration_robust(source, target, debug=False):
     # o3d.visualization.draw_geometries([source, target])
     voxel_radius = [0.04, 0.02, 0.01]
     max_iter = [50, 30, 14]
@@ -236,8 +236,7 @@ def colored_point_cloud_registration_robust(source, target):
         #                                                       relative_rmse=1e-6,
         #                                                       max_iteration=iter))
 
-        source = source.transform(result_icp.transformation)
-        current_transformation = current_transformation @ result_icp.transformation
+        current_transformation = result_icp.transformation
         logger.debug("result_icp:", result_icp)
         logger.debug("current_step_matrix:", result_icp.transformation)
         logger.debug("accumulated_matrix:", current_transformation)
@@ -246,7 +245,7 @@ def colored_point_cloud_registration_robust(source, target):
     return current_transformation
 
 
-def colored_point_cloud_registration_fine(source, target, debug=False):
+def point_cloud_registration_fine(source, target, debug=False):
     # o3d.visualization.draw_geometries([source, target])
     radius = 0.01
     iter = 10000

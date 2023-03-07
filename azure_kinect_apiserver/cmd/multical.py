@@ -25,7 +25,9 @@ from azure_kinect_apiserver.common import (
     MulticalCameraInfo,
     PointCloudHelper,
     vis_pcds,
-    colored_point_cloud_registration_fine,
+    save_pcds,
+    point_cloud_registration_fine,
+    colored_point_cloud_registration_robust,
     get_workspace_limit_by_interaction,
     merge_point_cloud_helpers,
     get_trans_mat_by_nws_combined,
@@ -69,9 +71,12 @@ def run_multical_with_docker(tagged_path: str) -> Tuple[Optional[Dict], Optional
         return None, FileNotFoundError(f"file {tagged_path} does not exist")
 
     cameras_name_list = list(
-        filter(lambda x: os.path.isdir(osp.join(tagged_path, x)),
-               os.listdir(tagged_path)
-               )
+        filter(
+            lambda x: os.path.isdir(osp.join(tagged_path, x)),
+            filter(
+                lambda x: x != 'tmp', os.listdir(tagged_path)
+            ),
+        )
     )  # ["rxx", "ryy", "rzz"]
 
     if len(cameras_name_list) <= 0:
@@ -114,9 +119,12 @@ def run_multical_with_docker(tagged_path: str) -> Tuple[Optional[Dict], Optional
 
 def generate_multicam_pc(tagged_path: str, debug: bool = False) -> Iterable[o3d.geometry.PointCloud]:
     cameras_name_list = list(
-        filter(lambda x: os.path.isdir(osp.join(tagged_path, x)),
-               os.listdir(tagged_path)
-               )
+        filter(
+            lambda x: os.path.isdir(osp.join(tagged_path, x)),
+            filter(
+                lambda x: x != 'tmp', os.listdir(tagged_path)
+            ),
+        )
     )  # ["rxx", "ryy", "rzz"]
     calibration_json = osp.join(tagged_path, "calibration.json")
     cam_info = MulticalCameraInfo(calibration_json)
@@ -162,9 +170,12 @@ def refine_multical_result(tagged_path: str, start_idx: int = 0):
     aruco_type = getattr(cv2.aruco, "DICT_" + board_cfg["common"]["aruco_dict"])
 
     cameras_name_list = list(
-        filter(lambda x: os.path.isdir(osp.join(tagged_path, x)),
-               os.listdir(tagged_path)
-               )
+        filter(
+            lambda x: os.path.isdir(osp.join(tagged_path, x)),
+            filter(
+                lambda x: x != 'tmp', os.listdir(tagged_path)
+            ),
+        )
     )  # ["rxx", "ryy", "rzz"]
     calibration_json = osp.join(tagged_path, "calibration.json")
     cam_info = MulticalCameraInfo(calibration_json)
@@ -191,7 +202,7 @@ def refine_multical_result(tagged_path: str, start_idx: int = 0):
         if img_idx < start_idx:
             continue
         raw_pc_by_camera = {}
-        aruco_pc_by_camera = {}
+        sliced_pc_by_camera = {}
 
         for cam_name in cameras_name_list:
             color_img_path = color_img_path_collection[cam_name][img_idx]
@@ -206,16 +217,15 @@ def refine_multical_result(tagged_path: str, start_idx: int = 0):
             depth_undistort = cv2.undistort(depth_img, cam_matrix, cam_dist)
 
             # aruco masking
-            gray = cv2.cvtColor(color_undistort, cv2.COLOR_BGR2GRAY)
-            corners, ids, rejectedImgPoints = aruco_ctx_collection[cam_name].detector.detectMarkers(gray)
-            color_undistort_masked = aruco_ctx_collection[cam_name].apply_polygon_mask_color(color_undistort, corners)
-            depth_undistort_masked = aruco_ctx_collection[cam_name].apply_polygon_mask_depth(depth_undistort, corners)
-
-            aruco_pc = PointCloudHelper(color_undistort_masked,
-                                        depth_undistort_masked,
-                                        camera_intrinsic_desc=(cam_info.get_resolution(cam_name)[0], cam_info.get_resolution(cam_name)[1], cam_info.get_intrinsic(cam_name)),
-                                        transform=cam_info.get_extrinsic(cam_name))
-            aruco_pc_by_camera[cam_name] = aruco_pc
+            # gray = cv2.cvtColor(color_undistort, cv2.COLOR_BGR2GRAY)
+            # corners, ids, rejectedImgPoints = aruco_ctx_collection[cam_name].detector.detectMarkers(gray)
+            # color_undistort_masked = aruco_ctx_collection[cam_name].apply_polygon_mask_color(color_undistort, corners)
+            # depth_undistort_masked = aruco_ctx_collection[cam_name].apply_polygon_mask_depth(depth_undistort, corners)
+            # aruco_pc = PointCloudHelper(color_undistort_masked,
+            #                             depth_undistort_masked,
+            #                             camera_intrinsic_desc=(cam_info.get_resolution(cam_name)[0], cam_info.get_resolution(cam_name)[1], cam_info.get_intrinsic(cam_name)),
+            #                             transform=cam_info.get_extrinsic(cam_name))
+            # aruco_pc_by_camera[cam_name] = aruco_pc
 
             raw_pc = PointCloudHelper(color_undistort,
                                       depth_undistort,
@@ -223,11 +233,25 @@ def refine_multical_result(tagged_path: str, start_idx: int = 0):
                                       transform=cam_info.get_extrinsic(cam_name))
             raw_pc_by_camera[cam_name] = raw_pc
 
+            sliced_pc_by_camera[cam_name] = raw_pc
+
+        os.makedirs(osp.join(tagged_path, 'tmp'), exist_ok=True)
+        [save_pcds([raw_pc_by_camera[cam_name].pcd], osp.join(tagged_path, 'tmp'), cam_name) for cam_name in cameras_name_list]
+        print("saved to {}".format(osp.join(tagged_path, 'tmp')))
+        print("edit the point cloud, remove background then press enter")
+        try:
+            input(">")
+        except KeyboardInterrupt:
+            shutil.rmtree(osp.join(tagged_path, 'tmp'))
+            return
+        sliced_pc_by_camera = {cam_name: o3d.io.read_point_cloud(osp.join(tagged_path, 'tmp', cam_name + '.ply')) for cam_name in cameras_name_list}
+
         refined_transformation_by_camera = {
-            cam_name: colored_point_cloud_registration_fine(
-                aruco_pc_by_camera[cam_name].pcd,
-                aruco_pc_by_camera[master_cam].pcd, debug=True) for cam_name in cameras_name_list if cam_name != master_cam
+            cam_name: colored_point_cloud_registration_robust(
+                sliced_pc_by_camera[cam_name],
+                sliced_pc_by_camera[master_cam], debug=True) for cam_name in cameras_name_list if cam_name != master_cam
         }
+        # shutil.move(osp.join(tagged_path, 'tmp'), osp.join(tagged_path, '.tmp'))
 
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list], fake_color=True)
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list])
@@ -235,20 +259,29 @@ def refine_multical_result(tagged_path: str, start_idx: int = 0):
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list], fake_color=True)
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list])
 
+        refined_transformation_by_camera[master_cam] = np.eye(4)
+
         sel = py_cli_interaction.must_parse_cli_bool("save?", default_value=False)
         if sel:
-            calibration_info: dict
-            with open(osp.join(tagged_path, "calibration.json")) as f:
-                calibration_info = json.load(f)
-                calibration_info["icp_extrinsic_refinement"] = {
-                    k: v.tolist() for k, v in refined_transformation_by_camera.items()
-                }
-                calibration_info["icp_extrinsic_refinement"][master_cam] = np.eye(4).tolist()
-
-            with open(osp.join(tagged_path, "calibration.json"), "w") as f:
-                json.dump(calibration_info, f, indent=4)
-
+            patch_refine_extrinsic(tagged_path, refined_transformation_by_camera)
             return
+        else:
+            abort = py_cli_interaction.must_parse_cli_bool("abort?", default_value=False)
+            if abort:
+                patch_refine_extrinsic(tagged_path, {cam_name: np.eye(4) for cam_name in cameras_name_list})
+                return
+
+
+def patch_refine_extrinsic(tagged_path: str, refine_extrinsic: Dict[str, np.ndarray]):
+    calibration_info: dict
+    with open(osp.join(tagged_path, "calibration.json")) as f:
+        calibration_info = json.load(f)
+        calibration_info["icp_extrinsic_refinement"] = {
+            k: v.tolist() for k, v in refine_extrinsic.items()
+        }
+
+    with open(osp.join(tagged_path, "calibration.json"), "w") as f:
+        json.dump(calibration_info, f, indent=4)
 
 
 def patch_workspace_limits(tagged_path: str, limits_nws: List[np.ndarray]):
@@ -288,6 +321,15 @@ def patch_rot_trans(tagged_path: str, rot: np.ndarray, trans: np.ndarray):
 
 
 def main(multical_path: str):
+    cameras_name_list = list(
+        filter(
+            lambda x: os.path.isdir(osp.join(tagged_path, x)),
+            filter(
+                lambda x: x != 'tmp', os.listdir(tagged_path)
+            ),
+        )
+    )
+
     if osp.exists(osp.join(multical_path, "calibration.json")):
         run_multical = py_cli_interaction.must_parse_cli_bool("run multical?", default_value=False)
     else:
@@ -305,6 +347,8 @@ def main(multical_path: str):
         start_idx = py_cli_interaction.must_parse_cli_int("start idx?", default_value=0)
         logger.info("examining camera extrinsics")
         refine_multical_result(multical_path, start_idx)
+    else:
+        patch_refine_extrinsic(multical_path, {cam_name: np.eye(4) for cam_name in cameras_name_list})
 
     get_transmat = py_cli_interaction.must_parse_cli_bool("get transmat?", default_value=False)
     rot: np.ndarray = None
@@ -314,7 +358,8 @@ def main(multical_path: str):
         for merged_pc in generate_multicam_pc(multical_path):
             rot, trans, err = get_trans_mat_by_nws_combined(merged_pc)
             if err is None:
-                logger.info("rotation and translation", rot, trans)
+                logger.info("rotation and translation")
+                logger.info(rot, trans)
                 patch_rot_trans(multical_path, rot, trans)
                 break
             else:

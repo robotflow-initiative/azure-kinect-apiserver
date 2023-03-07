@@ -2,14 +2,14 @@ from azure_kinect_apiserver.common import JointPointCloudDataset
 import numpy as np
 import open3d as o3d
 
-dataset = JointPointCloudDataset(r"C:\Users\robotflow\Desktop\fast-cloth-pose\data\test-1080p-1")
+dataset = JointPointCloudDataset(r"C:\Users\robotflow\Desktop\fast-cloth-pose\data\20230307_222352")
 
 print(len(dataset))
 print(dataset.start_idx)
 print(dataset[0])
 for i in range(dataset.start_idx, len(dataset)):
     point_cloud, marker_detection, force_data, point_cloud_status, marker_status, force_status, ts = dataset[i]
-    if point_cloud_status and marker_status and force_status:
+    if point_cloud_status and marker_status:  # and force_status:
 
         base_coordinate = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.3, origin=[0, 0, 0])  # to plot the base coordinate
         marker_coordinates = []  # to plot the marker coordinates

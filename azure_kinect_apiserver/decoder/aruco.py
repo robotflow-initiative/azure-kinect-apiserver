@@ -69,6 +69,12 @@ class ArucoDetectHelper:
     # def reset_dof_cache(self):
     #     self.dof_cache = {}
     @staticmethod
+    def depth2xyz(u, v, depth, K):
+        x = (u - K[0, 2]) * depth / K[0, 0]
+        y = (v - K[1, 2]) * depth / K[1, 1]
+        return np.array([x, y, depth]).reshape(3, 1)
+
+    @staticmethod
     def apply_polygon_mask_color(img: np.ndarray, polygons: List[np.ndarray]):
         mask = np.zeros(img.shape, dtype=img.dtype)
         for polygon in polygons:
@@ -131,7 +137,7 @@ class ArucoDetectHelper:
                               rvec: np.ndarray,
                               tvec: np.ndarray,
                               corners: np.ndarray,
-                              debug=False) -> Tuple[np.ndarray, np.ndarray, Optional[Exception]]:
+                              debug=False) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[Exception]]:
         pcd, err = self.create_roi_masked_point_cloud(color_frame, depth_frame, [corners], self.camera_matrix)
         if err is None:
             pcd.estimate_normals(
@@ -163,7 +169,7 @@ class ArucoDetectHelper:
 
             return rvec[score.argmax()], tvec[score.argmax()], None
         else:
-            return rvec, tvec, Exception("no depth")
+            return None, None, Exception("no depth")
 
     def preview_one_frame(self, color_frame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         output_color_frame = copy.deepcopy(color_frame)
@@ -202,10 +208,12 @@ class ArucoDetectHelper:
                 # print(rvec)
                 if ret:
                     rvec, tvec, err = self.reject_false_rotation(color_frame_undistort, depth_frame_undistort, rvecs, tvecs, corner[0])
-                    res[str(marker_id[0])] = (rvec, tvec, err is None)
-                    # res[str(marker_id[0])] = (rvecs[:, 0], tvecs[:, 0], True)
+                    if err is None:
+                        u, v = corner[0][0].astype(int).tolist()
+                        xyz = self.depth2xyz(u, v, cv2.medianBlur(depth_frame_undistort, 3)[v][u] / 1000, self.camera_matrix)  # 1000 is kinect depth scale
+                        res[str(marker_id[0])] = (rvec, xyz, err is None)
 
-            return res, output_color_frame, depth_frame_undistort, None
+            return res, output_color_frame, depth_frame_undistort, None if len(res) > 0 else Exception("no marker found")
         else:
             return None, output_color_frame, depth_frame_undistort, Exception("no marker found")
 
@@ -213,13 +221,13 @@ class ArucoDetectHelper:
         marker_meshes = [o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3, origin=[0, 0, 0])]
         for marker_id, (rvec, tvec, is_unique) in detection.items():
             if is_unique:
-                new_mesh = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.01, origin=tvec)
+                new_mesh = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.1, origin=tvec)
                 R, _ = cv2.Rodrigues(rvec)
                 new_mesh.rotate(R, center=tvec)
                 marker_meshes.append(new_mesh)
             else:
                 for i in range(len(rvec)):
-                    new_mesh = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.01, origin=tvec[i])
+                    new_mesh = o3d.geometry.TriangleMesh().create_coordinate_frame(size=0.1, origin=tvec[i])
                     R, _ = cv2.Rodrigues(rvec[i])
                     new_mesh.rotate(R, center=tvec[i])
                     marker_meshes.append(new_mesh)
