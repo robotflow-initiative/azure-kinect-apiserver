@@ -8,7 +8,7 @@ import numpy as np
 import plyer
 from py_cli_interaction import must_parse_cli_string
 
-from azure_kinect_apiserver.apiserver import Application
+from azure_kinect_apiserver.apiserver.server import Application
 from azure_kinect_apiserver.common import KinectSystemCfg
 from azure_kinect_apiserver.decoder import ArucoDetectHelper
 

@@ -164,7 +164,8 @@ def analyze_worker_s2(opt: KinectSystemCfg,
                     )
 
     detection_result_np_collection = {k: v for k, v in detection_result_np_collection.items() if k in valid_id_list}
-    print(detection_result_np_collection)
+    logger.info(f'Analyze worker s2 finished, {len(detection_result_np_collection)} frames processed')
+    # print(detection_result_np_collection)
 
     return detection_result_np_collection, None
 
@@ -177,7 +178,9 @@ def merge_multicam_pc(
         frame_path_pack: Dict[str, Tuple[str, str]],
         xlim: Tuple[float, float],
         ylim: Tuple[float, float],
-        zlim: Tuple[float, float]):
+        zlim: Tuple[float, float],
+        depth_trunc: Tuple[float, float],
+        depth_scale: float = 1000.):
     final_pc = {}
     for cam_name, (color_img_path, depth_img_path) in frame_path_pack.items():
         color_img, depth_img = cv2.imread(color_img_path), cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
@@ -189,6 +192,14 @@ def merge_multicam_pc(
         depth_undistort = cv2.undistort(depth_img, cam_matrix, cam_dist)
         color_undistort_masked, mask = remove_green_background(color_undistort)
         depth_undistort_masked = cv2.bitwise_and(depth_undistort, depth_undistort, mask=mask)
+
+        # filter noise
+        depth_undistort_masked = cv2.medianBlur(depth_undistort_masked, 3)
+        depth_undistort_masked[depth_undistort_masked < depth_trunc[0] * depth_scale] = 0
+        depth_undistort_masked[depth_undistort_masked > depth_trunc[1] * depth_scale] = 0
+
+        # Don't use gaussian filter
+        # depth_undistort_masked = cv2.GaussianBlur(depth_undistort_masked, (5, 5), 9)
 
         # build point cloud
         raw_pc = PointCloudHelper(
@@ -203,7 +214,8 @@ def merge_multicam_pc(
             enable_norm_filter=False,
             enable_denoise=enable_denoise,
             denoise_radius=0.02,
-            denoise_std_ratio=0.05
+            denoise_nb_neighbors=50,  # strong deoise
+            denoise_std_ratio=2,
         )
 
         cropped_pc = raw_pc.pcd
@@ -274,7 +286,8 @@ def analyze_worker_s3(opt: KinectSystemCfg,
                                              finetune_transform,
                                              enable_denoise,
                                              frame_path_pack,
-                                             xlim, ylim, zlim)
+                                             xlim, ylim, zlim,
+                                             (0.1, 3))
 
                 if opt.debug or DEBUG:
                     vis_pcds(final_pc.values(), fake_color=True)

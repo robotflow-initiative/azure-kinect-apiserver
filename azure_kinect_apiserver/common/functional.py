@@ -1,7 +1,7 @@
 import logging
 import os
 import subprocess
-from typing import Tuple, Optional, List, Iterable
+from typing import Tuple, Optional, List, Iterable, Callable
 
 import cv2
 import numpy as np
@@ -84,7 +84,8 @@ def save_pcds(transformed_pcd_list: List[o3d.geometry.PointCloud],
               save_path: str,
               tag: str,
               seperate=False,
-              fake_color=False):
+              fake_color=False,
+              filters: List[Callable[[o3d.geometry.PointCloud], o3d.geometry.PointCloud]] = None):
     """
     If you do not want hand-eye calibration, you can simply comment out the following lines.
     transform_mat[:3, :3] = R.from_quat((0.0710936350871877, 0.12186999407, -0.583974393827845, 0.799416854295149)).as_matrix()  # x, y, z, w

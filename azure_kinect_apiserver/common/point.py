@@ -136,7 +136,7 @@ class PointCloudHelper:
         xyz = np.asarray(pcd.points)
         rgb = np.asarray(pcd.colors)
 
-        mask = (xyz[:, 0] > x_min) & (xyz[:, 0] < y_max) & (xyz[:, 1] > y_min) & (xyz[:, 1] < y_max) & (xyz[:, 2] > z_min) & (xyz[:, 2] < z_max)
+        mask = (xyz[:, 0] > x_min) & (xyz[:, 0] < x_max) & (xyz[:, 1] > y_min) & (xyz[:, 1] < y_max) & (xyz[:, 2] > z_min) & (xyz[:, 2] < z_max)
         xyz = xyz[mask]
         rgb = rgb[mask]
 

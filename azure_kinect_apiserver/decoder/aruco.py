@@ -44,30 +44,6 @@ class ArucoDetectHelper:
         self.dof_cache = {}
         self.dof_freq = {}
 
-    #
-    # def set_dof_cache(self, key, rvec: np.ndarray, tvec: np.ndarray):
-    #     self.dof_cache[key] = (rvec, tvec)
-    #     if key in self.dof_freq.keys():
-    #         self.dof_freq[key] += 1
-    #     else:
-    #         self.dof_freq[key] = 0
-    #
-    # def get_dof_cache(self, key):
-    #     return (*self.dof_cache[key], None) if key in self.dof_cache else (None, None, Exception("cache not found"))
-    #
-    # def clean_dof_cache(self, freq=10):
-    #     pop_keys = []
-    #     for key in self.dof_freq.keys():
-    #         if self.dof_freq[key] < -freq:
-    #             pop_keys.append(key)
-    #         else:
-    #             self.dof_freq[key] -= 1
-    #     for key in pop_keys:
-    #         self.dof_cache.pop(key)
-    #         self.dof_freq.pop(key)
-    #
-    # def reset_dof_cache(self):
-    #     self.dof_cache = {}
     @staticmethod
     def depth2xyz(u, v, depth, K):
         x = (u - K[0, 2]) * depth / K[0, 0]
@@ -181,7 +157,12 @@ class ArucoDetectHelper:
         return output_color_frame, corners, ids
 
     # num = 0
-    def process_one_frame(self, color_frame, depth_frame, undistort=True, debug=False):
+    def process_one_frame(self,
+                          color_frame,
+                          depth_frame,
+                          depth_scale: float = 1000.,
+                          undistort=True,
+                          debug=False):
         undistort = False if self.camera_distort is None else undistort
         if self.camera_matrix is None:
             return None, None, None, Exception("no camera matrix")
@@ -193,6 +174,7 @@ class ArucoDetectHelper:
             color_frame_undistort = color_frame
             depth_frame_undistort = depth_frame
         output_color_frame = copy.deepcopy(color_frame_undistort)
+        depth_frame_undistort = cv2.medianBlur(depth_frame_undistort, 5)
 
         gray = cv2.cvtColor(color_frame_undistort, cv2.COLOR_BGR2GRAY)
         corners, ids, rejectedImgPoints = self.detector.detectMarkers(gray)
@@ -210,7 +192,7 @@ class ArucoDetectHelper:
                     rvec, tvec, err = self.reject_false_rotation(color_frame_undistort, depth_frame_undistort, rvecs, tvecs, corner[0])
                     if err is None:
                         u, v = corner[0][0].astype(int).tolist()
-                        xyz = self.depth2xyz(u, v, cv2.medianBlur(depth_frame_undistort, 3)[v][u] / 1000, self.camera_matrix)  # 1000 is kinect depth scale
+                        xyz = self.depth2xyz(u, v, depth_frame_undistort[v][u] / depth_scale, self.camera_matrix)  # 1000 is kinect depth scale
                         res[str(marker_id[0])] = (rvec, xyz, err is None)
 
             return res, output_color_frame, depth_frame_undistort, None if len(res) > 0 else Exception("no marker found")

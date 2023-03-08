@@ -6,7 +6,9 @@ import os.path as osp
 import pickle
 import threading
 import time
+import queue
 from typing import Optional
+import multiprocessing as mp
 
 import uvicorn
 from fastapi import FastAPI
@@ -16,6 +18,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from azure_kinect_apiserver.apiserver.app import Application
 from azure_kinect_apiserver.common import KinectSystemCfg
+from azure_kinect_apiserver.cmd.decode import mkv_worker
+from azure_kinect_apiserver.cmd.analyze import main as analyze_main
 
 APPLICATION: Optional[Application] = None
 controller: FastAPI = FastAPI()
@@ -27,6 +31,8 @@ controller.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+SUBPROCESSES = queue.Queue()
 
 
 def make_response(status_code, **kwargs):
@@ -88,6 +94,35 @@ def stop_recording():
     global APPLICATION
     ret = APPLICATION.stop_recording()
     return make_response(200, message="recording stopped", recording=APPLICATION.state['recording'], err=str(ret))
+
+
+@controller.post("/v1/azure/decode")
+def start_decoding(path: str):
+    p = mp.Process(None, target=mkv_worker, args=(path,))
+    p.start()
+
+    SUBPROCESSES.put(p)
+    return make_response(200, message="decoding started", pid=p.pid)
+
+
+@controller.post("/v1/azure/analyze")
+def start_analyze(path: str):
+    global APPLICATION
+    args = argparse.Namespace()
+    args.config = APPLICATION.option.config_path
+    args.marker_length = None
+    args.marker_type = None
+    args.valid_ids = None
+    args.quiet = True
+    args.enable_finetune = False
+    args.disable_denoise = False
+    args.data_dir = path
+
+    p = mp.Process(None, target=analyze_main, args=(args,))
+    p.start()
+
+    SUBPROCESSES.put(p)
+    return make_response(200, message="analyze started", pid=p.pid)
 
 
 # noinspection PyUnresolvedReferences
