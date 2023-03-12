@@ -7,6 +7,7 @@ import pickle
 import threading
 import time
 import queue
+import uuid
 from typing import Optional
 import multiprocessing as mp
 
@@ -33,6 +34,7 @@ controller.add_middleware(
 )
 
 SUBPROCESSES = queue.Queue()
+SUBPROCESSES_DESC = {}
 
 
 def make_response(status_code, **kwargs):
@@ -101,8 +103,10 @@ def start_decoding(path: str):
     p = mp.Process(None, target=mkv_worker, args=(path,))
     p.start()
 
-    SUBPROCESSES.put(p)
-    return make_response(200, message="decoding started", pid=p.pid)
+    unique_id = str(uuid.uuid4())
+    SUBPROCESSES.put((unique_id, p))
+    SUBPROCESSES_DESC[unique_id] = None
+    return make_response(200, message="decoding started", pid=p.pid, uuid=unique_id)
 
 
 @controller.post("/v1/azure/analyze")
@@ -125,6 +129,26 @@ def start_analyze(path: str):
     return make_response(200, message="analyze started", pid=p.pid)
 
 
+@controller.get("/v1/azure/job/{job_id}")
+def get_job_status(job_id: str):
+    global SUBPROCESSES_DESC
+    if job_id in SUBPROCESSES_DESC:
+        return make_response(200, message="job found")
+    else:
+        return make_response(404, message="job not found or finished")
+
+
+def join_subprocesses():
+    global SUBPROCESSES
+    while True:
+        if not SUBPROCESSES.empty():
+            unique_id, p = SUBPROCESSES.get()
+            p.join()
+            del SUBPROCESSES_DESC[unique_id]
+        else:
+            time.sleep(60)
+
+
 # noinspection PyUnresolvedReferences
 def main(args):
     global APPLICATION
@@ -143,8 +167,11 @@ def main(args):
     APPLICATION.logger.info(f"azure apiserver config {cfg}")
 
     try:
-        thread = threading.Thread(target=uvicorn.run, kwargs={'app': controller, 'port': cfg.api_port, 'host': cfg.api_interface})
-        thread.start()
+        thread1 = threading.Thread(target=uvicorn.run, kwargs={'app': controller, 'port': cfg.api_port, 'host': cfg.api_interface})
+        thread1.start()
+
+        thread2 = threading.Thread(target=join_subprocesses)
+        thread2.start()
 
         while True:
             time.sleep(86400)

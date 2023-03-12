@@ -65,7 +65,7 @@ class StateMachine:
 
     @property
     def ready(self):
-        return all([len(x) > 0 for x in self.frame_buffer.values()])
+        return (not self.closed and all([len(x) > 3 for x in self.frame_buffer.values()])) or (self.closed and all([len(x) > 0 for x in self.frame_buffer.values()]))
 
     def try_pop(self):
         self.mutex.acquire()

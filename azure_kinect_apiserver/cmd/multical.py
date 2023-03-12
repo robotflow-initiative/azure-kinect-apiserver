@@ -260,6 +260,7 @@ def refine_multical_result(tagged_path: str, start_idx: int = 0):
         vis_pcds([raw_pc_by_camera[camera].pcd for camera in cameras_name_list])
 
         refined_transformation_by_camera[master_cam] = np.eye(4)
+        logging.info("refined extrinsic: {}".format(refined_transformation_by_camera))
 
         sel = py_cli_interaction.must_parse_cli_bool("save?", default_value=False)
         if sel:
@@ -323,9 +324,9 @@ def patch_rot_trans(tagged_path: str, rot: np.ndarray, trans: np.ndarray):
 def main(multical_path: str):
     cameras_name_list = list(
         filter(
-            lambda x: os.path.isdir(osp.join(tagged_path, x)),
+            lambda x: os.path.isdir(osp.join(multical_path, x)),
             filter(
-                lambda x: x != 'tmp', os.listdir(tagged_path)
+                lambda x: x != 'tmp', os.listdir(multical_path)
             ),
         )
     )
