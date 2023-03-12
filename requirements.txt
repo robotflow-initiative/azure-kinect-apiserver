@@ -1,7 +1,6 @@
 pyyaml
 opencv-python~=4.7.0
 numpy
-h5py
 tqdm
 fastapi>=0.87.0
 uvicorn>=0.20.0
