@@ -226,7 +226,7 @@ def merge_multicam_pc(
         cropped_pc.transform(cam_info.get_realworld_transmat())
 
         # crop by limits
-        cropped_pc = PointCloudHelper.crop_by_hsv_limits_reverse(cropped_pc, [35, 77], [43, 255], [46, 255])
+        cropped_pc = PointCloudHelper.crop_by_hsv_limits_reverse(cropped_pc, [35, 79], [43, 255], [46, 255])
         cropped_pc = PointCloudHelper.crop_by_xyz_limits(cropped_pc, xlim, ylim, zlim)
 
         # remove outliers

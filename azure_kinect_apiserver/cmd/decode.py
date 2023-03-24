@@ -179,9 +179,3 @@ def entry_point(argv):
         args = argparse.Namespace()
         args.data_dir = data_dir
         return main(args)
-
-
-if __name__ == '__main__':
-    import sys
-
-    exit(entry_point(sys.argv[1:]))

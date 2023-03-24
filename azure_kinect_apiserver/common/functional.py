@@ -334,6 +334,48 @@ def get_nws_points(point_cloud: o3d.geometry.PointCloud) -> Tuple[Tuple[np.ndarr
     return (base, north, west), None
 
 
+def get_nws_points_n(point_cloud: o3d.geometry.PointCloud, n: int) -> Tuple[List[Tuple[np.ndarray, np.ndarray, np.ndarray]], Optional[Exception]]:
+    vis1 = o3d.visualization.VisualizerWithEditing()
+    vis1.create_window('Please press Shift and click 3 Points: Base - North - West. Press Q to exit.')
+    logger.debug('Please press Shift and click 3 Points: Base - North - West. Press Q to exit.')
+    vis1.add_geometry(point_cloud)
+    vis1.update_renderer()
+    vis1.run()  # user picks points
+    vis1.destroy_window()
+
+    pts_sel = vis1.get_picked_points()
+    if len(pts_sel) != 3 * n:
+        return [(np.array([]), np.array([]), np.array([]))], Exception(f"Please select {3 * n} points")
+
+    res = []
+    pcd_points = np.asarray(point_cloud.points)
+    pts = pcd_points[pts_sel]
+    for i in range(n):
+        res.append((pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]))
+
+    return res, None
+
+
+def get_color(point_cloud: o3d.geometry.PointCloud, n: int) -> Tuple[List[Tuple[np.ndarray, np.ndarray, np.ndarray]], Optional[Exception]]:
+    vis1 = o3d.visualization.VisualizerWithEditing()
+    vis1.create_window('Please press Shift and click 3 Points: Base - North - West. Press Q to exit.')
+    logger.debug('Please press Shift and click 3 Points: Base - North - West. Press Q to exit.')
+    vis1.add_geometry(point_cloud)
+    vis1.update_renderer()
+    vis1.run()  # user picks points
+    vis1.destroy_window()
+
+    pts_sel = vis1.get_picked_points()
+    if len(pts_sel) != n:
+        return [(np.array([]), np.array([]), np.array([]))], Exception(f"Please select {n} points")
+
+    colors = []
+    pcd_colors = np.asarray(point_cloud.colors)
+    pts = pcd_colors[pts_sel]
+
+    return pts, None
+
+
 def get_trans_mat_by_nws_combined(point_cloud: o3d.geometry.PointCloud) -> Tuple[np.ndarray, np.ndarray, Optional[Exception]]:
     """
     Get transformation matrix by north and west direction, with interaction
@@ -361,6 +403,44 @@ def get_trans_mat_by_nws_combined(point_cloud: o3d.geometry.PointCloud) -> Tuple
     rot, trans = rigid_transform_3d(point_set_A, point_set_B)
 
     return rot, trans, None
+
+
+def get_marker_by_nws_combined(point_cloud: o3d.geometry.PointCloud, n: int = 1) -> Tuple[List[np.ndarray], Optional[Exception]]:
+    """
+    Get transformation matrix by north and west direction, with interaction
+
+    :param pc_helper:
+    :return:
+    """
+    points, err = get_nws_points_n(point_cloud, n)
+    if err is not None:
+        return [np.array([])], err
+
+    res = []
+    for (base, north, west) in points:
+        north_direction, west_direction = north - base, west - base
+        north_direction /= np.linalg.norm(north_direction)
+        west_direction /= np.linalg.norm(west_direction)
+
+        point_set_A = np.concatenate((
+            base[:, None],
+            (base + north_direction)[:, None],
+            (base + west_direction)[:, None],
+        ), axis=1)
+        point_set_B = np.array(
+            [[0, 0, 0],
+             [1, 0, 0],
+             [0, 1, 0]]
+        ).T
+        rot, trans = rigid_transform_3d(point_set_A, point_set_B)
+        T = np.eye(4)
+        T[:3, :3] = rot
+        T[:3, 3:4] = trans
+        T = np.linalg.inv(T)
+        T[:3, 3:4] = base[:, None]
+        res.append(T)
+
+    return res, None
 
 
 def get_workspace_limit_by_interaction(point_cloud: o3d.geometry.PointCloud) -> Tuple[List[np.ndarray], Optional[Exception]]:
