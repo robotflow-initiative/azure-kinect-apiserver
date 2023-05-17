@@ -72,8 +72,8 @@ def single_shot(tag: str, index: int, save: bool = True):
     else:
         # 4 x 2160p color + depth consumes 210M bandwidth
         # TODO: use a better way to transfer data
-        color_frames, depth_frames, index, err = APPLICATION.single_shot_mem(tag, index)
-        return make_response(200, single_shot=APPLICATION.state['single_shot'], depth=base64.b64encode(pickle.dumps(depth_frames)), color=base64.b64encode(pickle.dumps(color_frames)), index=index,
+        color_frames, depth_frames, index, err = APPLICATION.single_shot_compressed(index)
+        return make_response(200, single_shot=APPLICATION.state['single_shot'], depth=depth_frames, color=color_frames, index=index,
                              ret=str(err))
 
 
@@ -144,6 +144,7 @@ def join_subprocesses():
         if not SUBPROCESSES.empty():
             unique_id, p = SUBPROCESSES.get()
             p.join()
+
             del SUBPROCESSES_DESC[unique_id]
         else:
             time.sleep(60)
@@ -191,7 +192,7 @@ def main(args):
 
 def entry_point(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='./azure_kinect_config.yaml', help='path to azure kinect config file')
+    parser.add_argument('--config', type=str, default='./config.yaml', help='path to azure kinect config file')
     parser.add_argument('--multical_calibration', type=str, default=None, help='path to multical calibration file, can be its parent directory')
     args = parser.parse_args(argv)
     main(args)
