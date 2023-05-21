@@ -8,6 +8,7 @@ import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple, Dict, List
+import base64
 
 import cv2
 import numpy as np
@@ -299,7 +300,7 @@ class Application:
 
         return current_frames, current_depth_frames, index, None
 
-    def single_shot_mem(self, tag: Optional[str], index: int) -> Tuple[List[np.ndarray], List[np.ndarray], int, Optional[Exception]]:
+    def single_shot_mem(self, index: int) -> Tuple[List[np.ndarray], List[np.ndarray], int, Optional[Exception]]:
         if not self.state["single_shot"]:
             err = self.enter_single_shot_mode()
             if err is not None:
@@ -312,6 +313,15 @@ class Application:
             self.__retrieve_frame__(self.device_list, current_frames, current_depth_frames, i)
 
         return current_frames, current_depth_frames, index, None
+
+    def single_shot_compressed(self, index: int) -> Tuple[List[bytes], List[bytes], int, Optional[Exception]]:
+        color_frames, depth_frames, index, err = self.single_shot_mem(index)
+        if err is not None:
+            return color_frames, depth_frames, index, err
+        else:
+            color_frames_compressed = [base64.b64encode(cv2.imencode('.jpg', frame)[1].tobytes()) for frame in color_frames]
+            depth_frames_compressed = [base64.b64encode(cv2.imencode('.png', frame)[1].tobytes()) for frame in depth_frames]
+            return color_frames_compressed, depth_frames_compressed, index, None
 
     def load_mulitcal_calibration(self, calibration_file: str):
         self.multical_calibration = MulticalCameraInfo(calibration_file)

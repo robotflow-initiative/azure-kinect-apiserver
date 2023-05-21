@@ -111,8 +111,8 @@ class PointCloudHelper:
 
         # denoise
         if enable_denoise:
-            # _, ind = pcd.remove_radius_outlier(nb_points=denoise_nb_points, radius=denoise_radius)
-            # pcd = pcd.select_by_index(ind)
+            _, ind = pcd.remove_radius_outlier(nb_points=denoise_nb_points, radius=denoise_radius)
+            pcd = pcd.select_by_index(ind)
             _, ind = pcd.remove_statistical_outlier(nb_neighbors=denoise_nb_neighbors, std_ratio=denoise_std_ratio)
             pcd = pcd.select_by_index(ind)
 

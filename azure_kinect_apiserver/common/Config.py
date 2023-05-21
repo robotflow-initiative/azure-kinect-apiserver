@@ -253,7 +253,7 @@ class KinectSystemCfg(BaseCfg):
 
     @staticmethod
     def configure_from_keyboard() -> bool:
-        output_dir = must_parse_cli_string('Output Directory', './azure_kinect_config.yaml')
+        output_dir = must_parse_cli_string('Output Directory', './config.yaml')
         data_path = must_parse_cli_string('Data Path', './azure_kinect_data')
         exec_path = must_parse_cli_string('Exec Path', 'k4arecorder')
         api_port = must_parse_cli_int('API Port', 1, 65535, 8080)

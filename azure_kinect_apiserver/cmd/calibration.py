@@ -36,7 +36,7 @@ def interaction_loop(app: Application):
     print("--------\nPress 's' or Enter to take a single shot, 'c' or space to refresh preview, 'q' or ESC to quit\n--------")
     index = 0
     while True:
-        color_frames, depth_frames, _, err = app.single_shot_mem(tag, index)
+        color_frames, depth_frames, _, err = app.single_shot_mem(index)
         if err is not None:
             logging.error(f"error: {err}")
             break
@@ -62,6 +62,7 @@ def interaction_loop(app: Application):
 
     with open(osp.join(app.option.data_path, tag, "calibration.json"), "w") as f:
         f.write('{}')
+    logging.info(f"calibration data saved to {osp.join(app.option.data_path, tag)}")
 
 
 def aruco_preview(app: Application):
@@ -71,7 +72,7 @@ def aruco_preview(app: Application):
         getattr(cv2.aruco, app.option.marker_type),
     )
     while True:
-        color_frames, depth_frames, _, err = app.single_shot_mem(None, 0)
+        color_frames, depth_frames, _, err = app.single_shot_mem(0)
         if err is not None:
             logging.error(f"error: {err}")
             continue
@@ -118,7 +119,7 @@ def main(args: argparse.Namespace):
 
 def entry_point(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='./azure_kinect_config.yaml')
+    parser.add_argument('--config', type=str, default='./config.yaml')
     parser.add_argument('--aruco_preview', action='store_true')
     print(argv)
 
