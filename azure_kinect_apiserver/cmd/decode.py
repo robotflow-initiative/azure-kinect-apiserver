@@ -47,7 +47,7 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
     # Read metadata and check if all color images are present
     _color_img_path_collection = sorted(glob.glob(os.path.join(tagged_path, cam_name, 'color', '*.jpg')), key=lambda x: int(osp.splitext(osp.basename(x))[0]))
     color_img_meta = pd.read_csv(os.path.join(tagged_path, cam_name, 'meta.csv'))
-    assert len(color_img_meta) == len(_color_img_path_collection), f"len(color_img_meta)={len(color_img_meta)}"
+    assert len(color_img_meta) == len(_color_img_path_collection), f"len(color_img_meta)={len(color_img_meta)} but len(_color_img_path_collection)={len(_color_img_path_collection)}"
     color_img_path_collection = [osp.join(tagged_path, cam_name, 'color', str(filename_no_ext) + '.jpg') for filename_no_ext in color_img_meta['basename']]
     assert all([osp.exists(x) for x in color_img_path_collection]), f"some color images are missing"
 
@@ -55,6 +55,7 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
     calibration_pairs = []
     last_qrcode_data = None
     no_detect_count = 0
+    logger.info(f"examine {cam_name} for {examine_n_frames} frames, maximum no detect count is {maximum_no_detect_count}")
 
     with tqdm.tqdm(total=len(color_img_path_collection)) as pbar:
         for img_idx, img_path in enumerate(color_img_path_collection):
@@ -96,6 +97,17 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
 def mkv_worker(kinect_dir: str):
     files = glob.glob(kinect_dir + "/*.mkv")
     names = [osp.basename(f).split('.')[0] for f in files]
+    metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
+    master_camera_candidates = list(filter(lambda x: x[1]['is_master'] is True, metadata['recordings'].items()))
+    if len(master_camera_candidates) == 0:
+        logger.warning("no master camera found, using first camera as master")
+        master_camera = names[0]
+    else:
+        master_camera = master_camera_candidates[0][0]
+    
+    names = [master_camera] + list(filter(lambda x: x != master_camera, names))
+    logger.info(f"master_camera: {names[0]}, all_cameras: {names}", )
+        
     wrappers = [
         mkv_record_wrapper(f) for f in files
     ]
@@ -117,13 +129,13 @@ def mkv_worker(kinect_dir: str):
                     continue
 
             frames = {k: frame_futures[k].result() for k in names if frame_futures[k] is not None}
+            # print({k: v['color_dev_ts_usec'] if v is not None else None for k, v in frames.items()})
 
             for stream_id, frame in frames.items():
                 if frame is not None:
                     m.push(stream_id, frame)
-                    pbar.set_description(f"pressure: {len(m.frame_buffer[names[1]])}")
+                    pbar.set_description(f"pressure: {len(m.frame_buffer[names[-1]])}")
                     pbar.update(1)
-
         m.close()
         t.join()
 
@@ -131,18 +143,18 @@ def mkv_worker(kinect_dir: str):
         with open(osp.join(kinect_dir, names[i], f"calibration.kinect.json"), "w") as f:
             json.dump(get_mkv_record_calibration(file)[0], f, indent=4, sort_keys=True)
 
-    metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
-    master_camera = list(filter(lambda x: x[1]['is_master'] is True, metadata['recordings'].items()))[0][0]
-    ts, ts_action_start, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=master_camera, debug=False)
-    ret: Optional[Exception] = None
-    if err is not None:
-        logging.error(str(err))
-        ret = Exception("failed to get timestamp offset")
-        metadata['system_timestamp_offset'] = 0
-        metadata['system_action_start_timestamp'] = 0
-    else:
-        metadata['system_timestamp_offset'] = ts
-        metadata['system_action_start_timestamp'] = ts_action_start
+    ret: Optional[Exception] = Exception("failed to get timestamp offset")
+    metadata['system_timestamp_offset'] = 0
+    metadata['system_action_start_timestamp'] = 0
+    for cam_name in names:
+        ts, ts_action_start, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=cam_name, debug=False)
+        ret= None
+        if err is not None:
+            logging.error(str(err))
+            continue
+        else:
+            metadata['system_timestamp_offset'] = ts
+            metadata['system_action_start_timestamp'] = ts_action_start
 
     with open(osp.join(kinect_dir, "meta.json"), "w") as f:
         json.dump(metadata, f, indent=4, sort_keys=True)

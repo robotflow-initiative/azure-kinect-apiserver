@@ -74,6 +74,10 @@ class StateMachine:
             return None
         else:
             master_frame = self.frame_buffer[self.master_id].popleft()
+            if len(self.subordinate_ids) == 0:
+                self.mutex.release()
+                return {self.master_id: master_frame}
+
             while len(self.frame_buffer[self.master_id]) > 0:
                 if any([abs(self.frame_buffer[subordinate_id][0]['color_dev_ts_usec'] - master_frame['color_dev_ts_usec']) for subordinate_id in self.subordinate_ids]):
                     break
@@ -91,19 +95,20 @@ class StateMachine:
                         subordinate_frames[subordinate_id] = subordinate_frame  # save frame
                         break
                     elif subordinate_frame['color_dev_ts_usec'] > master_frame['color_dev_ts_usec']:
+                        # print(subordinate_id, abs(subordinate_frame['color_dev_ts_usec'] - master_frame['color_dev_ts_usec']))
+                        self.frame_buffer[subordinate_id].appendleft(subordinate_frame)
                         flag_master_not_synced = True
                         break
                     else:
+                        # print(subordinate_id, abs(subordinate_frame['color_dev_ts_usec'] - master_frame['color_dev_ts_usec']))
                         continue
 
                 if flag_master_not_synced:
                     break
 
             if flag_master_not_synced or any([x is None for x in subordinate_frames.values()]):
-                for stream_id, frame in subordinate_frames.items():
-                    if frame is not None:
-                        self.frame_buffer[stream_id].appendleft(frame)
                 self.mutex.release()
+                # print(flag_master_not_synced, [x is None for x in subordinate_frames.values()])
                 return None
             else:
                 self.mutex.release()
@@ -127,7 +132,9 @@ def state_machine_save_thread_v1(m: StateMachine, data_dir: str, camera_names: L
         meta_handles[stream_id].write('basename,index,color_dev_ts_usec,depth_dev_ts_usec,color_sys_ts_nsec,depth_sys_ts_nsec\n')
 
     pool = ThreadPoolExecutor(max_workers=4)
-    while not m.closed:
+    while True:
+        if m.closed and not m.ready:
+            break
         if m.ready:
             frames = m.try_pop()
             if frames is not None:
@@ -143,4 +150,7 @@ def state_machine_save_thread_v1(m: StateMachine, data_dir: str, camera_names: L
                     # cv2.imwrite(osp.join(data_dir, stream_id, 'depth', f'{frame["color_dev_ts_usec"]}.png'), frame['depth'])
         else:
             time.sleep(2)  # Must be an enough long duration
+
+    for stream_id, handle in meta_handles.items():
+        handle.close()
     pool.shutdown(wait=True)

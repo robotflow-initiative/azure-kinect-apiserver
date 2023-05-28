@@ -5,7 +5,7 @@
 Clone and change directory into this directory
 
 ```shell
-git clone https://gihub.com/mvig-robotflow/azure-kinect-apiserver.git
+git clone --recursive https://gihub.com/mvig-robotflow/azure-kinect-apiserver.git
 cd azure-kinect-apiserver
 ```
 
@@ -66,9 +66,12 @@ Set-Item Env:PATH "$Env:PATH;/path/to/azure-kinect-sdk/"
     ```shell
     python -m azure_kinect_apiserver decode <path_to_recording>
     ```
+
+    > please put your mkvs under <path_to_recording>/kinect
+
     This will create corresponding folders for each camera in the same directory as the recording.
     ```
-    <path_to_recording>
+    <path_to_recording>/kinect
     ├─000673513312
     │  ├─color
     │  └─depth
