@@ -42,7 +42,7 @@ Set-Item Env:PATH "$Env:PATH;/path/to/azure-kinect-sdk/"
 
 - Run multical to get camera extrinsics. This command requires a valid docker installation
     ```shell
-    python -m azure_kinect_apiserver multical --config=<path_to_config>
+    python -m azure_kinect_apiserver multical --config=<path_to_calibration.json>
     ```
 
 
