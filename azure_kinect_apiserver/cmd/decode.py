@@ -156,6 +156,7 @@ def mkv_worker(kinect_dir: str):
         else:
             metadata['system_timestamp_offset'] = ts
             metadata['system_action_start_timestamp'] = ts_action_start
+            break
 
     with open(osp.join(kinect_dir, "meta.json"), "w") as f:
         json.dump(metadata, f, indent=4, sort_keys=True)
