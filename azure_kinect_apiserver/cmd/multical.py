@@ -343,14 +343,15 @@ def main(multical_path: str):
         else:
             logger.info(f"multical result, {res}")
 
-    refine_result = py_cli_interaction.must_parse_cli_bool("refine?", default_value=False)
-    if refine_result:
-        logger.info("refining result, press Esc to close preview")
-        start_idx = py_cli_interaction.must_parse_cli_int("start idx?", default_value=0)
-        logger.info("examining camera extrinsics")
-        refine_multical_result(multical_path, start_idx)
-    else:
-        patch_refine_extrinsic(multical_path, {cam_name: np.eye(4) for cam_name in cameras_name_list})
+    # Temporary disable refine
+    # refine_result = py_cli_interaction.must_parse_cli_bool("refine?", default_value=False)
+    # if refine_result:
+    #     logger.info("refining result, press Esc to close preview")
+    #     start_idx = py_cli_interaction.must_parse_cli_int("start idx?", default_value=0)
+    #     logger.info("examining camera extrinsics")
+    #     refine_multical_result(multical_path, start_idx)
+    # else:
+    #     patch_refine_extrinsic(multical_path, {cam_name: np.eye(4) for cam_name in cameras_name_list})
 
     get_transmat = py_cli_interaction.must_parse_cli_bool("get transmat?", default_value=False)
     rot: np.ndarray = None

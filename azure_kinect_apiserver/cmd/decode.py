@@ -94,7 +94,7 @@ def get_timestamp_offset_from_decoded(tagged_path: str,
         return timestamp_offset, datetime.datetime.strptime(calibration_pairs[-1][-1], "%Y-%m-%d_%H:%M:%S.%f").timestamp(), None
 
 
-def mkv_worker(kinect_dir: str):
+def mkv_worker(kinect_dir: str, decode_timestamp: bool=False):
     files = glob.glob(kinect_dir + "/*.mkv")
     names = [osp.basename(f).split('.')[0] for f in files]
     metadata = {'recordings': {names[i]: get_mkv_record_meta(file)[0] for i, file in enumerate(files)}}
@@ -147,16 +147,19 @@ def mkv_worker(kinect_dir: str):
     ret: Optional[Exception] = Exception("failed to get timestamp offset")
     metadata['system_timestamp_offset'] = 0
     metadata['system_action_start_timestamp'] = 0
-    for cam_name in names:
-        ts, ts_action_start, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=cam_name, debug=False)
-        ret= None
-        if err is not None:
-            logging.error(str(err))
-            continue
-        else:
-            metadata['system_timestamp_offset'] = ts
-            metadata['system_action_start_timestamp'] = ts_action_start
-            break
+
+    if decode_timestamp:
+        logging.info("decoding timestamp")
+        for cam_name in names:
+            ts, ts_action_start, err = get_timestamp_offset_from_decoded(tagged_path=kinect_dir, cam_name=cam_name, debug=False)
+            ret = None
+            if err is not None:
+                logging.error(str(err))
+                continue
+            else:
+                metadata['system_timestamp_offset'] = ts
+                metadata['system_action_start_timestamp'] = ts_action_start
+                break
 
     with open(osp.join(kinect_dir, "meta.json"), "w") as f:
         json.dump(metadata, f, indent=4, sort_keys=True)
@@ -173,11 +176,11 @@ def main(args: argparse.Namespace):
 
 
 def entry_point(argv):
+    args = argparse.Namespace()
     if len(argv) < 1:
         try:
             f = plyer.filechooser.choose_dir(title="Select a recording")
             if len(f) > 0:
-                args = argparse.Namespace()
                 args.data_dir = f[0]
                 return main(args)
             else:
@@ -190,6 +193,5 @@ def entry_point(argv):
 
     else:
         data_dir = argv[0]
-        args = argparse.Namespace()
         args.data_dir = data_dir
         return main(args)

@@ -99,8 +99,8 @@ def stop_recording():
 
 
 @controller.post("/v1/azure/decode")
-def start_decoding(path: str):
-    p = mp.Process(None, target=mkv_worker, args=(path,))
+def start_decoding(path: str = "", decode_timestamp: bool = False):
+    p = mp.Process(None, target=mkv_worker, args=(path, decode_timestamp))
     p.start()
 
     unique_id = str(uuid.uuid4())
