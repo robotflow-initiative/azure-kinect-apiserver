@@ -56,6 +56,12 @@ def get_status():
     return make_response(200, recording=APPLICATION.state['recording'], single_shot=APPLICATION.state['single_shot'], status=True)
 
 
+@controller.get("/v1/azure/cameras")
+def get_cameras():
+    global APPLICATION
+    cameras, err = APPLICATION.list_device()
+    return make_response(200, cameras=cameras, err=str(err))
+
 @controller.get("/v1/azure/single_shot")
 def single_shot(tag: str, index: int, save: bool = True):
     """
