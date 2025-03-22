@@ -146,6 +146,8 @@ class KinectSystemCfg(BaseCfg):
     marker_length_m: float
     marker_type: str
 
+    enable_timestamp_detection: bool
+
     def __init__(self, config_path: str):
         self.config_path = config_path
         try:
@@ -174,7 +176,8 @@ class KinectSystemCfg(BaseCfg):
                 'valid_ids': self.marker_valid_ids,
                 'length': self.marker_length_m,
                 'type': self.marker_type,
-            }
+            },
+            'enable_timestamp_detection': self.enable_timestamp_detection,
         }
 
     def load_dict(self, src: Dict[str, Any]) -> None:
@@ -200,6 +203,9 @@ class KinectSystemCfg(BaseCfg):
             self.marker_valid_ids = src['marker']['valid_ids'] if 'valid_ids' in src['marker'].keys() else []
             self.marker_length_m = src['marker']['length'] if 'length' in src['marker'].keys() else -1
             self.marker_type = src['marker']['type'] if 'type' in src['marker'].keys() else ''
+
+        if 'enable_timestamp_detection' in src.keys():
+            self.enable_timestamp_detection = src['enable_timestamp_detection']
 
     @property
     def valid(self) -> bool:
@@ -313,6 +319,8 @@ class KinectSystemCfg(BaseCfg):
                 } for x in cams
             ]
 
+            enable_timestamp_detection = must_parse_cli_bool('Enable Timestamp Detection', default_value=False)
+
             cfg_dict = {
                 'azure_kinect': {
                     'data_path': data_path,
@@ -327,7 +335,8 @@ class KinectSystemCfg(BaseCfg):
                         'valid_ids': [],
                         'length': marker_length,
                         'type': marker_type
-                    }
+                    },
+                    'enable_timestamp_detection': enable_timestamp_detection
                 }
             }
 

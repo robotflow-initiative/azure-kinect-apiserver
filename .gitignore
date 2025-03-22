@@ -1,15 +1,18 @@
+# IDE
 .vscode
 .idea
 
+# Build Cache
 dist
 build
 *.egg-info
 *.whl
 
-
+# Generated Data
 azure_kinect_data
 data
 output
 *.mkv
 
+# Python Cache
 *.pyc
